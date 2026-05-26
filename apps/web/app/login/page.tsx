@@ -38,75 +38,85 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-[#001f3f]">
       {/* Painel esquerdo — decorativo */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-[#001f3f] flex-col items-center justify-center overflow-hidden">
-        <div className="absolute -top-32 -left-32 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#003A70]/30 rounded-full blur-2xl" />
+      <div className="hidden lg:flex lg:w-1/2 relative flex-col items-center justify-center overflow-hidden border-r border-white/10">
+        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] bg-blue-500/15 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] bg-blue-700/10 rounded-full blur-3xl" />
         <div
-          className="absolute inset-0 opacity-[0.04]"
+          className="absolute inset-0 opacity-[0.035]"
           style={{
             backgroundImage:
               "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
-            backgroundSize: "40px 40px",
+            backgroundSize: "48px 48px",
           }}
         />
 
-        <div className="relative z-10 text-center px-12">
-          <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl">
-            <Image src="/anac-logo.png" alt="ANAC" width={56} height={56} className="object-contain" />
+        <div className="relative z-10 text-center px-14">
+          {/* Logo em container branco para contrastar */}
+          <div className="w-28 h-28 bg-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-black/40 p-3">
+            <Image
+              src="/anac-logo.png"
+              alt="ANAC"
+              width={88}
+              height={88}
+              className="object-contain"
+            />
           </div>
-          <h2 className="text-3xl font-bold text-white mb-3">ANAC Data Insight</h2>
-          <p className="text-blue-200/70 text-base leading-relaxed max-w-xs mx-auto">
+          <h2 className="text-4xl font-bold text-white mb-4 tracking-tight">
+            ANAC Data Insight
+          </h2>
+          <p className="text-blue-200/70 text-lg leading-relaxed max-w-sm mx-auto">
             Plataforma de análise de dados operacionais da aviação civil brasileira
           </p>
 
-          <div className="mt-10 grid grid-cols-3 gap-4 text-center">
+          <div className="mt-12 grid grid-cols-3 gap-4">
             {[
-              { label: "Análises", value: "IA" },
+              { label: "Análise IA", value: "Smart" },
               { label: "Segurança", value: "100%" },
               { label: "Relatórios", value: "PDF" },
             ].map((item) => (
-              <div key={item.label} className="bg-white/5 border border-white/10 rounded-xl p-3">
-                <p className="text-white font-bold text-lg">{item.value}</p>
-                <p className="text-blue-200/50 text-xs mt-0.5">{item.label}</p>
+              <div key={item.label} className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                <p className="text-white font-bold text-xl">{item.value}</p>
+                <p className="text-blue-300/60 text-sm mt-1">{item.label}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Painel direito — formulário */}
-      <div className="flex-1 bg-gray-50 flex flex-col items-center justify-center px-6 py-12">
+      {/* Painel direito — formulário, mesmo tema escuro */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
         {/* Logo mobile */}
-        <div className="lg:hidden flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-[#003A70] rounded-xl flex items-center justify-center p-1.5">
-            <Image src="/anac-logo.png" alt="ANAC" width={28} height={28} className="object-contain" />
+        <div className="lg:hidden flex flex-col items-center gap-4 mb-10">
+          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-xl">
+            <Image src="/anac-logo.png" alt="ANAC" width={52} height={52} className="object-contain" />
           </div>
-          <span className="text-[#003A70] font-bold text-lg">ANAC Data Insight</span>
+          <span className="text-white font-bold text-xl">ANAC Data Insight</span>
         </div>
 
-        <div className="w-full max-w-sm">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">Bem-vindo de volta</h1>
-            <p className="text-gray-500 text-sm mt-1">Entre com suas credenciais institucionais</p>
+        <div className="w-full max-w-md">
+          <div className="mb-10">
+            <h1 className="text-3xl font-bold text-white mb-2">Bem-vindo de volta</h1>
+            <p className="text-blue-200/60 text-base">Entre com suas credenciais institucionais</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {/* Campo usuário */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Usuário</label>
+              <label className="block text-sm font-semibold text-blue-100/80 mb-2">
+                Usuário
+              </label>
               <div
-                className={`flex items-center gap-3 bg-white border-2 rounded-xl px-4 py-3 transition-all duration-200 ${
+                className={`flex items-center gap-3 border-2 rounded-xl px-4 py-3.5 transition-all duration-200 ${
                   focused === "username"
-                    ? "border-[#003A70] shadow-[0_0_0_3px_rgba(0,58,112,0.12)]"
-                    : "border-gray-200 hover:border-gray-300"
+                    ? "border-blue-400 bg-white/10 shadow-[0_0_0_3px_rgba(96,165,250,0.15)]"
+                    : "border-white/15 bg-white/5 hover:border-white/25 hover:bg-white/8"
                 }`}
               >
                 <User
-                  className={`w-4 h-4 flex-shrink-0 transition-colors ${
-                    focused === "username" ? "text-[#003A70]" : "text-gray-400"
+                  className={`w-5 h-5 flex-shrink-0 transition-colors ${
+                    focused === "username" ? "text-blue-400" : "text-white/40"
                   }`}
                 />
                 <input
@@ -116,7 +126,7 @@ export default function LoginPage() {
                   onChange={(e) => setUsername(e.target.value)}
                   onFocus={() => setFocused("username")}
                   onBlur={() => setFocused(null)}
-                  className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none"
+                  className="flex-1 bg-transparent text-base text-white placeholder-white/30 outline-none"
                   placeholder="seu.usuario"
                   required
                 />
@@ -125,17 +135,19 @@ export default function LoginPage() {
 
             {/* Campo senha */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Senha</label>
+              <label className="block text-sm font-semibold text-blue-100/80 mb-2">
+                Senha
+              </label>
               <div
-                className={`flex items-center gap-3 bg-white border-2 rounded-xl px-4 py-3 transition-all duration-200 ${
+                className={`flex items-center gap-3 border-2 rounded-xl px-4 py-3.5 transition-all duration-200 ${
                   focused === "password"
-                    ? "border-[#003A70] shadow-[0_0_0_3px_rgba(0,58,112,0.12)]"
-                    : "border-gray-200 hover:border-gray-300"
+                    ? "border-blue-400 bg-white/10 shadow-[0_0_0_3px_rgba(96,165,250,0.15)]"
+                    : "border-white/15 bg-white/5 hover:border-white/25 hover:bg-white/8"
                 }`}
               >
                 <KeyRound
-                  className={`w-4 h-4 flex-shrink-0 transition-colors ${
-                    focused === "password" ? "text-[#003A70]" : "text-gray-400"
+                  className={`w-5 h-5 flex-shrink-0 transition-colors ${
+                    focused === "password" ? "text-blue-400" : "text-white/40"
                   }`}
                 />
                 <input
@@ -145,26 +157,26 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   onFocus={() => setFocused("password")}
                   onBlur={() => setFocused(null)}
-                  className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none"
+                  className="flex-1 bg-transparent text-base text-white placeholder-white/30 outline-none"
                   placeholder="••••••••"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  className="text-white/30 hover:text-white/70 transition-colors"
                   tabIndex={-1}
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
 
             {/* Erro */}
             {error && (
-              <div className="flex items-center gap-2.5 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{error}</span>
+              <div className="flex items-center gap-3 text-sm text-red-300 bg-red-500/10 border border-red-400/30 rounded-xl px-4 py-3.5">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span className="text-base">{error}</span>
               </div>
             )}
 
@@ -172,14 +184,14 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !username || !password}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-[#003A70] hover:bg-[#002550] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-xl transition-all duration-150 shadow-md shadow-blue-900/20"
+              className="w-full flex items-center justify-center gap-2 py-4 bg-blue-500 hover:bg-blue-400 active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold text-base rounded-xl transition-all duration-150 shadow-lg shadow-blue-500/25 mt-2"
             >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {loading && <Loader2 className="w-5 h-5 animate-spin" />}
               {loading ? "Autenticando..." : "Entrar na plataforma"}
             </button>
           </form>
 
-          <p className="text-center text-xs text-gray-400 mt-8">
+          <p className="text-center text-sm text-blue-200/30 mt-10">
             Agência Nacional de Aviação Civil · Uso interno restrito
           </p>
         </div>
