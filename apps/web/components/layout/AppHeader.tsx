@@ -3,7 +3,9 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Menu, X, LogOut } from "lucide-react";
+import { auth } from "@/lib/auth";
 
 const navLinks = [
   { href: "/dashboard", label: "Dashboard" },
@@ -15,6 +17,12 @@ const navLinks = [
 
 export default function AppHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const router = useRouter();
+
+  function handleLogout() {
+    auth.clearToken();
+    router.push("/login");
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-[#003A70] border-b border-[#002550] shadow-md">
@@ -52,6 +60,13 @@ export default function AppHeader() {
                 {link.label}
               </Link>
             ))}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors duration-150"
+            >
+              <LogOut className="w-4 h-4" />
+              Sair
+            </button>
           </nav>
 
           {/* Mobile menu button */}
@@ -79,6 +94,13 @@ export default function AppHeader() {
                 {link.label}
               </Link>
             ))}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-300 rounded hover:bg-[#0057A8] hover:text-white transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Sair da conta
+            </button>
           </nav>
         </div>
       )}
