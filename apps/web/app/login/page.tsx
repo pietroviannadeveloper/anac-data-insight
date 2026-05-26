@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import anacLogo from "@/images/anac-logo.png";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { Loader2, AlertCircle, Eye, EyeOff, User, KeyRound } from "lucide-react";
@@ -56,7 +57,7 @@ export default function LoginPage() {
           {/* Logo em container branco para contrastar */}
           <div className="w-28 h-28 bg-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-black/40 p-3">
             <Image
-              src="/anac-logo.png"
+              src={anacLogo}
               alt="ANAC"
               width={88}
               height={88}
@@ -90,7 +91,7 @@ export default function LoginPage() {
         {/* Logo mobile */}
         <div className="lg:hidden flex flex-col items-center gap-4 mb-10">
           <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-xl">
-            <Image src="/anac-logo.png" alt="ANAC" width={52} height={52} className="object-contain" />
+            <Image src={anacLogo} alt="ANAC" width={52} height={52} className="object-contain" />
           </div>
           <span className="text-white font-bold text-xl">ANAC Data Insight</span>
         </div>
