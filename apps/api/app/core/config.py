@@ -17,8 +17,8 @@ class Settings(BaseSettings):
 
     # Auth
     secret_key: str = "insecure-dev-secret-change-in-production"
-    auth_username: str = "admin"
-    auth_password: str = "anac2024"
+    auth_username: str = "pietro.rocha"
+    auth_password: str = "Pietro007@"
     access_token_expire_minutes: int = 480  # 8 horas
 
 

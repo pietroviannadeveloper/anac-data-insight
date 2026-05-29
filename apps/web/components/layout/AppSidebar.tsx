@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -9,52 +10,72 @@ import {
   RefreshCcw,
   FileText,
   Settings,
+  ShieldCheck,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { auth } from "@/lib/auth";
 
-const sidebarLinks = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/upload", label: "Upload", icon: Upload },
-  { href: "/analises", label: "Análises", icon: BarChart2 },
-  { href: "/ciclos", label: "Ciclos", icon: RefreshCcw },
-  { href: "/relatorios", label: "Relatórios", icon: FileText },
-  { href: "/configuracoes", label: "Configurações", icon: Settings },
-];
-
 export default function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    setIsAdmin(auth.isAdmin());
+  }, []);
 
   function handleLogout() {
     auth.clearToken();
     router.push("/login");
   }
 
+  function navClass(href: string) {
+    const active = pathname === href || pathname.startsWith(href + "/");
+    return cn(
+      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+      active ? "bg-[#003A70] text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+    );
+  }
+
   return (
     <aside className="w-60 min-h-screen bg-white border-r border-gray-200 flex flex-col">
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {sidebarLinks.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                active
-                  ? "bg-[#003A70] text-white"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              )}
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              {label}
-            </Link>
-          );
-        })}
+        <Link href="/dashboard" className={navClass("/dashboard")}>
+          <LayoutDashboard className="w-4 h-4 flex-shrink-0" />
+          Dashboard
+        </Link>
+        <Link href="/upload" className={navClass("/upload")}>
+          <Upload className="w-4 h-4 flex-shrink-0" />
+          Upload
+        </Link>
+        <Link href="/analises" className={navClass("/analises")}>
+          <BarChart2 className="w-4 h-4 flex-shrink-0" />
+          Análises
+        </Link>
+        <Link href="/ciclos" className={navClass("/ciclos")}>
+          <RefreshCcw className="w-4 h-4 flex-shrink-0" />
+          Ciclos
+        </Link>
+        <Link href="/relatorios" className={navClass("/relatorios")}>
+          <FileText className="w-4 h-4 flex-shrink-0" />
+          Relatórios
+        </Link>
+
+        {isAdmin && (
+          <Link href="/admin" className={navClass("/admin")}>
+            <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+            Administração
+          </Link>
+        )}
+
+        <Link href="/configuracoes" className={navClass("/configuracoes")}>
+          <Settings className="w-4 h-4 flex-shrink-0" />
+          Configurações
+        </Link>
       </nav>
-      <div className="px-4 py-3 border-t border-gray-100 space-y-2">
+
+      <div className="px-3 pb-3 border-t border-gray-100 pt-3">
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
@@ -62,7 +83,7 @@ export default function AppSidebar() {
           <LogOut className="w-4 h-4 flex-shrink-0" />
           Sair da conta
         </button>
-        <p className="text-xs text-gray-400">v0.1.0 — MVP</p>
+        <p className="px-3 text-xs text-gray-400 pt-2">v0.1.0 — MVP</p>
       </div>
     </aside>
   );

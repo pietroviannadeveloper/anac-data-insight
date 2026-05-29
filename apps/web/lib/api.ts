@@ -38,6 +38,28 @@ export const api = {
     if (!r.ok) throw new Error(`Erro ${r.status}`);
   },
 
+  patch: (path: string, body?: unknown) =>
+    fetch(`${API_BASE}${path}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }).then((r) => {
+      if (r.status === 401) handleUnauthorized();
+      if (!r.ok) throw new Error(`API error ${r.status}`);
+      return r.json();
+    }),
+
+  deleteWithBody: async (path: string, body: unknown) => {
+    const r = await fetch(`${API_BASE}${path}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(body),
+    });
+    if (r.status === 401) handleUnauthorized();
+    if (!r.ok) throw new Error(`Erro ${r.status}`);
+    return r.json();
+  },
+
   upload: async (path: string, file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -70,5 +92,6 @@ export const api = {
     }
     const data = await r.json();
     auth.setToken(data.access_token);
+    auth.setRole(data.role ?? "user");
   },
 };

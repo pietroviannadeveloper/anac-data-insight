@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Menu, X, LogOut } from "lucide-react";
+import { Menu, X, LogOut, ShieldCheck } from "lucide-react";
 import { auth } from "@/lib/auth";
 
 const navLinks = [
@@ -17,7 +17,12 @@ const navLinks = [
 
 export default function AppHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    setIsAdmin(auth.isAdmin());
+  }, []);
 
   function handleLogout() {
     auth.clearToken();
@@ -60,6 +65,15 @@ export default function AppHeader() {
                 {link.label}
               </Link>
             ))}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors duration-150"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Admin
+              </Link>
+            )}
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors duration-150"
@@ -94,6 +108,16 @@ export default function AppHeader() {
                 {link.label}
               </Link>
             ))}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Admin
+              </Link>
+            )}
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-300 rounded hover:bg-[#0057A8] hover:text-white transition-colors"

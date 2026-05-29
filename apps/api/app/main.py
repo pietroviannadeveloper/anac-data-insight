@@ -6,8 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.core.dependencies import get_current_user
-from app.routes import ai, analyses, health, upload
+from app.core.dependencies import get_current_user, require_admin
+from app.routes import admin, ai, analyses, health, upload
 from app.routes import auth as auth_router
 
 
@@ -27,7 +27,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-dev_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+dev_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+]
 origins = dev_origins if settings.environment == "development" else settings.cors_origins
 
 app.add_middleware(
@@ -39,12 +44,14 @@ app.add_middleware(
 )
 
 _protected = [Depends(get_current_user)]
+_admin_protected = [Depends(require_admin)]
 
 app.include_router(health.router)
 app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(upload.router, prefix="/api/v1", dependencies=_protected)
 app.include_router(analyses.router, prefix="/api/v1", dependencies=_protected)
 app.include_router(ai.router, prefix="/api/v1", dependencies=_protected)
+app.include_router(admin.router, prefix="/api/v1", dependencies=_admin_protected)
 
 
 @app.exception_handler(404)
