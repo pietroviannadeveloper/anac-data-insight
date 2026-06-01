@@ -27,6 +27,10 @@ class Analysis(Base):
     total_rows = Column(Integer, default=0)
     total_columns = Column(Integer, default=0)
     indicators = Column(JSON, nullable=True)
+    description = Column(Text, nullable=True)
+    tags = Column(JSON, nullable=True, default=list)
+    parent_analysis_id = Column(String, nullable=True)   # links re-uploads of the same file
+    version = Column(Integer, default=1)
     created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     completed_at = Column(DateTime, nullable=True)
@@ -61,8 +65,51 @@ class CicloActivity(Base):
     sem_pcdp = Column(Integer, default=0)
     sem_processo = Column(Integer, default=0)
     local_indefinido = Column(Integer, default=0)
+    tipo_ciclo = Column(String, nullable=True)  # CICLO_BASE | CICLO_DESEMPENHO | NAO_PROGRAMADA | INDEFINIDO
+    criterio_classificacao = Column(String, nullable=True)
 
     analysis = relationship("Analysis", back_populates="ciclo_activities")
+
+
+class Comment(Base):
+    """User comments/annotations on an analysis."""
+    __tablename__ = "comments"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    analysis_id = Column(String, ForeignKey("analyses.id"), nullable=False)
+    username = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class AlertRule(Base):
+    """Configurable threshold rules applied when an analysis completes."""
+    __tablename__ = "alert_rules"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    label = Column(String, nullable=False)          # Human-readable name
+    metric = Column(String, nullable=False)          # e.g. taxa_execucao, pendencias_criticas
+    operator = Column(String, nullable=False)        # lt | gt | lte | gte | eq
+    threshold = Column(Integer, nullable=False)
+    analysis_types = Column(JSON, default=list)      # ["ciclos"] or ["ciclos","generic"]
+    enabled = Column(Integer, default=1)             # 1 | 0
+    created_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class AlertEvent(Base):
+    """Records a rule firing on a specific analysis."""
+    __tablename__ = "alert_events"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    analysis_id = Column(String, ForeignKey("analyses.id"), nullable=False)
+    rule_id = Column(String, ForeignKey("alert_rules.id"), nullable=False)
+    rule_label = Column(String, nullable=False)
+    metric = Column(String, nullable=False)
+    triggered_value = Column(Integer, nullable=True)
+    threshold = Column(Integer, nullable=False)
+    operator = Column(String, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class AIAnalysis(Base):

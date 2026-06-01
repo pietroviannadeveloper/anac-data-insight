@@ -64,8 +64,8 @@ async def create_user(
         raise HTTPException(status_code=400, detail="Nome de usuário não pode ser vazio.")
     if len(body.password) < 6:
         raise HTTPException(status_code=400, detail="A senha deve ter no mínimo 6 caracteres.")
-    if body.role not in ("admin", "user"):
-        raise HTTPException(status_code=400, detail="Perfil inválido. Use 'admin' ou 'user'.")
+    if body.role not in ("admin", "analyst", "viewer"):
+        raise HTTPException(status_code=400, detail="Perfil inválido. Use 'admin', 'analyst' ou 'viewer'.")
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(status_code=409, detail="Usuário já existe.")
     user = User(
@@ -222,6 +222,16 @@ async def admin_list_analyses(
     total = q.count()
     items = q.order_by(Analysis.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
 
+    # Lookup roles for all creators in one query
+    usernames = {a.created_by for a in items if a.created_by}
+    role_map: dict = {}
+    if usernames:
+        from app.models.user import User as UserModel
+        role_map = {
+            u.username: u.role
+            for u in db.query(UserModel).filter(UserModel.username.in_(list(usernames))).all()
+        }
+
     return {
         "items": [
             {
@@ -232,6 +242,10 @@ async def admin_list_analyses(
                 "status": a.status,
                 "total_rows": a.total_rows,
                 "total_columns": a.total_columns,
+                "description": a.description,
+                "tags": a.tags or [],
+                "created_by": a.created_by,
+                "created_by_role": role_map.get(a.created_by) if a.created_by else None,
                 "created_at": a.created_at.isoformat() if a.created_at else None,
                 "completed_at": a.completed_at.isoformat() if a.completed_at else None,
                 "error_message": a.error_message,

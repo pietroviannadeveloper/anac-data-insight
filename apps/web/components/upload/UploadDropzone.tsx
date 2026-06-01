@@ -4,30 +4,55 @@ import { useState, useRef, DragEvent, ChangeEvent } from "react";
 import { UploadCloud, CheckCircle, AlertCircle, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type UploadMode = "spreadsheet" | "pdf";
+
 interface UploadDropzoneProps {
   onFileSelect?: (file: File) => void;
   loading?: boolean;
   className?: string;
+  mode?: UploadMode;
 }
 
 const MAX_SIZE_MB = 50;
-const ALLOWED_TYPES = [".csv", ".xlsx", ".xls"];
-const ALLOWED_MIME = [
-  "text/csv",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-excel",
-];
 
-export default function UploadDropzone({ onFileSelect, loading, className }: UploadDropzoneProps) {
+const MODE_CONFIG: Record<UploadMode, {
+  types: string[];
+  mime: string[];
+  accept: string;
+  label: string;
+  hint: string;
+}> = {
+  spreadsheet: {
+    types: [".csv", ".xlsx", ".xls"],
+    mime: [
+      "text/csv",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+    ],
+    accept: ".csv,.xlsx,.xls",
+    label: "Arraste um arquivo CSV ou XLSX aqui",
+    hint: "Formatos aceitos: CSV, XLSX, XLS",
+  },
+  pdf: {
+    types: [".pdf"],
+    mime: ["application/pdf"],
+    accept: ".pdf",
+    label: "Arraste um arquivo PDF aqui",
+    hint: "Formatos aceitos: PDF",
+  },
+};
+
+export default function UploadDropzone({ onFileSelect, loading, className, mode = "spreadsheet" }: UploadDropzoneProps) {
   const [dragging, setDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cfg = MODE_CONFIG[mode];
 
   const validate = (f: File): string | null => {
     const ext = "." + f.name.split(".").pop()?.toLowerCase();
-    if (!ALLOWED_TYPES.includes(ext) && !ALLOWED_MIME.includes(f.type)) {
-      return "Formato não suportado. Use CSV, XLSX ou XLS.";
+    if (!cfg.types.includes(ext) && !cfg.mime.includes(f.type)) {
+      return `Formato não suportado. ${cfg.hint}.`;
     }
     if (f.size > MAX_SIZE_MB * 1024 * 1024) {
       return `Arquivo excede o limite de ${MAX_SIZE_MB} MB.`;
@@ -92,7 +117,7 @@ export default function UploadDropzone({ onFileSelect, loading, className }: Upl
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,.xlsx,.xls"
+        accept={cfg.accept}
         className="hidden"
         onChange={onChange}
         disabled={loading}
@@ -133,11 +158,11 @@ export default function UploadDropzone({ onFileSelect, loading, className }: Upl
             )}
           />
           <p className="font-semibold text-white/75 text-base">
-            Arraste um arquivo CSV ou XLSX aqui
+            {cfg.label}
           </p>
           <p className="text-sm text-white/40 mt-1">ou clique para selecionar</p>
           <p className="text-xs text-white/25 mt-3">
-            Formatos aceitos: CSV, XLSX, XLS — até {MAX_SIZE_MB} MB
+            {cfg.hint} — até {MAX_SIZE_MB} MB
           </p>
         </>
       )}

@@ -9,12 +9,15 @@ import {
   BarChart2,
   RefreshCcw,
   FileText,
+  FileScan,
+  Bot,
   Settings,
   ShieldCheck,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { auth } from "@/lib/auth";
+import { api } from "@/lib/api";
 
 export default function AppSidebar() {
   const pathname = usePathname();
@@ -26,8 +29,7 @@ export default function AppSidebar() {
   }, []);
 
   function handleLogout() {
-    auth.clearToken();
-    router.push("/login");
+    api.logout();
   }
 
   function navClass(href: string) {
@@ -57,9 +59,17 @@ export default function AppSidebar() {
           <RefreshCcw className="w-4 h-4 flex-shrink-0" />
           Ciclos
         </Link>
+        <Link href="/documentos" className={navClass("/documentos")}>
+          <FileScan className="w-4 h-4 flex-shrink-0" />
+          Documentos PDF
+        </Link>
         <Link href="/relatorios" className={navClass("/relatorios")}>
           <FileText className="w-4 h-4 flex-shrink-0" />
           Relatórios
+        </Link>
+        <Link href="/chat" className={navClass("/chat")}>
+          <Bot className="w-4 h-4 flex-shrink-0" />
+          Chat IA
         </Link>
 
         {isAdmin && (

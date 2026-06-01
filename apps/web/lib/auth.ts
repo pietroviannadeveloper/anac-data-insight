@@ -1,11 +1,8 @@
 const TOKEN_COOKIE = "anac_token";
-
-function setCookie(name: string, value: string, hours: number): void {
-  const expires = new Date(Date.now() + hours * 36e5).toUTCString();
-  document.cookie = `${name}=${encodeURIComponent(value)};expires=${expires};path=/;SameSite=Strict`;
-}
+const ROLE_COOKIE = "anac_role";
 
 function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
   const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;
 }
@@ -14,44 +11,39 @@ function deleteCookie(name: string): void {
   document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
 }
 
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const base64 = token.split(".")[1];
-    return JSON.parse(atob(base64.replace(/-/g, "+").replace(/_/g, "/")));
-  } catch {
-    return null;
-  }
-}
-
 export const auth = {
+  // Used only by api.ts for backward-compat Bearer header (cookie also sent via credentials:include)
   getToken: (): string | null => {
     if (typeof window === "undefined") return null;
-    return getCookie(TOKEN_COOKIE);
-  },
-
-  setToken: (token: string): void => {
-    setCookie(TOKEN_COOKIE, token, 8);
-  },
-
-  clearToken: (): void => {
-    deleteCookie(TOKEN_COOKIE);
+    // anac_token is httpOnly — cannot be read by JS. Return null intentionally.
+    // All API calls rely on credentials: "include" to send the cookie automatically.
+    return null;
   },
 
   isAuthenticated: (): boolean => {
-    return !!auth.getToken();
+    // Presence of the role cookie is the proxy indicator since anac_token is httpOnly
+    return !!getCookie(ROLE_COOKIE);
   },
 
   getRole: (): string => {
-    const token = auth.getToken();
-    if (!token) return "user";
-    const payload = decodeJwtPayload(token);
-    return typeof payload?.role === "string" ? payload.role : "user";
+    return getCookie(ROLE_COOKIE) || "viewer";
   },
 
   isAdmin: (): boolean => {
     return auth.getRole() === "admin";
   },
 
-  // mantido para compatibilidade — role agora vem do JWT
+  isAnalystOrAdmin: (): boolean => {
+    return ["admin", "analyst"].includes(auth.getRole());
+  },
+
+  clearSession: (): void => {
+    // Only clears the readable role cookie; anac_token (httpOnly) is cleared by backend logout
+    deleteCookie(ROLE_COOKIE);
+    deleteCookie(TOKEN_COOKIE); // in case non-httpOnly token still exists from old sessions
+  },
+
+  // No-op kept for legacy calls
+  setToken: (_token: string): void => {},
   setRole: (_role: string): void => {},
 };

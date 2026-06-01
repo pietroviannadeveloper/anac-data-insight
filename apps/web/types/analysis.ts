@@ -1,16 +1,22 @@
 export type AnalysisStatus = "pending" | "processing" | "completed" | "error";
-export type SpreadsheetType = "ciclos" | "generic" | "unknown";
+export type SpreadsheetType = "ciclos" | "generic" | "pdf" | "unknown";
 export type ActivityStatus = "realizado" | "agendado" | "sem-agendamento";
 export type CriticalityLabel = "Regular" | "Atenção" | "Crítico" | "Muito crítico";
 
 export interface Analysis {
   id: string;
   original_filename: string;
-  file_type: "csv" | "xlsx" | "xls";
+  file_type: "csv" | "xlsx" | "xls" | "pdf";
   detected_type: SpreadsheetType;
   status: AnalysisStatus;
   total_rows: number;
   total_columns: number;
+  indicators?: Record<string, unknown>;
+  description?: string;
+  tags?: string[];
+  parent_analysis_id?: string;
+  version?: number;
+  created_by?: string;
   created_at: string;
   completed_at?: string;
   error_message?: string;

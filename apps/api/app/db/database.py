@@ -33,7 +33,19 @@ def create_tables():
     from app.models import user as user_models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     _ensure_role_column()
+    _migrate_old_roles()
     _seed_admin()
+
+
+def _migrate_old_roles() -> None:
+    """Migrate legacy 'user' role to 'analyst' so existing users keep write access."""
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("UPDATE users SET role = 'analyst' WHERE role = 'user'"))
+            conn.commit()
+    except Exception:
+        pass
 
 
 def _ensure_role_column() -> None:

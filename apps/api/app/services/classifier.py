@@ -1,16 +1,27 @@
 """
-Spreadsheet Classifier
+Spreadsheet Classifier  (Python ≥ 3.9 compatible)
 ======================
 Detects whether a spreadsheet is a ciclo-type (fiscal cycle) based on
 column name patterns, accepting variations with accents, spaces, and
 different naming conventions.
+
+Also classifies individual rows as CICLO_BASE, CICLO_DESEMPENHO,
+NAO_PROGRAMADA or INDEFINIDO based on the Item column prefix.
 """
 
+from __future__ import annotations
+
+import re
 import unicodedata
 import polars as pl
 from typing import Literal
 
 SpreadsheetType = Literal["ciclos", "generic", "unknown"]
+TipoCiclo = Literal["CICLO_BASE", "CICLO_DESEMPENHO", "NAO_PROGRAMADA", "INDEFINIDO"]
+
+# Regex patterns for row-level classification (case-insensitive)
+_RE_DESEMPENHO   = re.compile(r"^\s*D[\s.\-_/]*[A-Za-z0-9]+", re.IGNORECASE)
+_RE_NAO_PROGRAMADA = re.compile(r"^\s*N[\s.\-_/]*\d+", re.IGNORECASE)
 
 
 def normalize_col(c: str) -> str:
@@ -77,3 +88,27 @@ def classify_spreadsheet(df: pl.DataFrame) -> SpreadsheetType:
     if has_scheduling or has_specific or has_broad:
         return "ciclos"
     return "generic"
+
+
+def classify_row_type(item_value: str | None) -> tuple[TipoCiclo, str]:
+    """
+    Classify a single row as CICLO_BASE, CICLO_DESEMPENHO, NAO_PROGRAMADA or INDEFINIDO
+    based on the value of the Item column.
+
+    Returns (tipo_ciclo, criterio_classificacao).
+    """
+    if item_value is None or not item_value.strip():
+        return "INDEFINIDO", "Coluna Item ausente ou vazia"
+
+    val = item_value.strip()
+
+    if _RE_DESEMPENHO.match(val):
+        return "CICLO_DESEMPENHO", f"Item inicia com 'D': {val}"
+
+    if _RE_NAO_PROGRAMADA.match(val):
+        return "NAO_PROGRAMADA", f"Item inicia com 'N' seguido de número: {val}"
+
+    if val[0].isdigit():
+        return "CICLO_BASE", f"Item numérico (ciclo base): {val}"
+
+    return "INDEFINIDO", f"Padrão de Item não reconhecido: {val}"

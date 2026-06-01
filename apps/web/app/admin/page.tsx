@@ -7,14 +7,14 @@ import AppFooter from "@/components/layout/AppFooter";
 import {
   Users, ShieldCheck, Loader2, AlertCircle, Plus, X, CheckCircle,
   XCircle, KeyRound, Trash2, RefreshCw, Eye, EyeOff, ChevronLeft,
-  ChevronRight, LogIn, LogOut,
+  ChevronRight, LogIn, LogOut, FileText, FileSpreadsheet, User,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "usuarios" | "acessos";
+type Tab = "usuarios" | "acessos" | "arquivos";
 
 interface AdminUser {
   id: string;
@@ -740,6 +740,222 @@ const AcessosTab = () => {
   );
 };
 
+// ─── Tab: Arquivos ────────────────────────────────────────────────────────────
+
+interface AdminAnalysis {
+  id: string;
+  original_filename: string;
+  file_type: string;
+  detected_type: string;
+  status: string;
+  total_rows: number;
+  description?: string;
+  tags?: string[];
+  created_by?: string;
+  created_by_role?: string;
+  created_at: string | null;
+  error_message?: string;
+}
+
+const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
+  admin:   { label: "admin",   cls: "bg-purple-400/15 text-purple-300 border-purple-400/20" },
+  analyst: { label: "analyst", cls: "bg-blue-400/15 text-blue-300 border-blue-400/20" },
+  viewer:  { label: "viewer",  cls: "bg-white/10 text-white/40 border-white/15" },
+};
+
+const TYPE_MAP: Record<string, { label: string; cls: string }> = {
+  ciclos:  { label: "Ciclos",    cls: "bg-indigo-400/15 text-indigo-300 border-indigo-400/20" },
+  generic: { label: "Genérico",  cls: "bg-teal-400/15 text-teal-300 border-teal-400/20" },
+  pdf:     { label: "PDF",       cls: "bg-amber-400/15 text-amber-300 border-amber-400/20" },
+  unknown: { label: "?",         cls: "bg-white/8 text-white/30 border-white/10" },
+};
+
+const STATUS_MAP: Record<string, { label: string; cls: string }> = {
+  completed:  { label: "Concluída",   cls: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20" },
+  processing: { label: "Processando", cls: "text-blue-300 bg-blue-400/10 border-blue-400/20" },
+  error:      { label: "Erro",        cls: "text-red-400 bg-red-400/10 border-red-400/20" },
+  pending:    { label: "Pendente",    cls: "text-yellow-300 bg-yellow-400/10 border-yellow-400/20" },
+};
+
+const ArquivosTab = () => {
+  const [analyses, setAnalyses] = useState<AdminAnalysis[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filterUser, setFilterUser] = useState("");
+  const [filterType, setFilterType] = useState("");
+  const PER_PAGE = 20;
+
+  const load = useCallback(async (p: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ page: String(p), per_page: String(PER_PAGE) });
+      if (filterType) params.set("detected_type", filterType);
+      const data = await api.get(`/api/v1/admin/analyses?${params}`);
+      // client-side filter by user since backend doesn't support it yet
+      const items: AdminAnalysis[] = filterUser
+        ? data.items.filter((a: AdminAnalysis) => (a.created_by ?? "").toLowerCase().includes(filterUser.toLowerCase()))
+        : data.items;
+      setAnalyses(items);
+      setTotal(filterUser ? items.length : data.total);
+    } catch {
+      setError("Não foi possível carregar o histórico de arquivos.");
+    } finally {
+      setLoading(false);
+    }
+  }, [filterUser, filterType]);
+
+  useEffect(() => { load(page); }, [page, load]);
+  useEffect(() => { setPage(1); load(1); }, [filterUser, filterType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+          <input
+            value={filterUser}
+            onChange={e => setFilterUser(e.target.value)}
+            placeholder="Filtrar por usuário..."
+            className="pl-8 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-blue-200/80 placeholder-white/25 focus:outline-none focus:border-blue-400/50 w-48"
+          />
+        </div>
+        <select
+          value={filterType}
+          onChange={e => setFilterType(e.target.value)}
+          className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-blue-200/80 focus:outline-none focus:border-blue-400/50"
+        >
+          <option value="">Todos os tipos</option>
+          <option value="ciclos">Ciclos</option>
+          <option value="generic">Genérico</option>
+          <option value="pdf">PDF</option>
+        </select>
+        {(filterUser || filterType) && (
+          <button onClick={() => { setFilterUser(""); setFilterType(""); }}
+            className="flex items-center gap-1 px-2.5 py-2 text-xs text-blue-200/60 hover:text-white bg-white/5 border border-white/10 rounded-lg transition-colors">
+            <X className="w-3 h-3" /> Limpar
+          </button>
+        )}
+        <span className="text-xs text-blue-200/30 ml-auto">{total} arquivo{total !== 1 ? "s" : ""}</span>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-14 gap-2 text-blue-200/50">
+            <Loader2 className="w-5 h-5 animate-spin" /><span className="text-sm">Carregando...</span>
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center py-14 gap-2 text-red-400">
+            <AlertCircle className="w-5 h-5" /><span className="text-sm">{error}</span>
+          </div>
+        ) : analyses.length === 0 ? (
+          <div className="flex items-center justify-center py-14 text-blue-200/30 text-sm">
+            Nenhum arquivo encontrado.
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-white/5 border-b border-white/10">
+              <tr>
+                {["Arquivo", "Tipo", "Status", "Registros", "Criado por", "Data"].map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-medium text-blue-200/60 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {analyses.map(a => {
+                const typeInfo  = TYPE_MAP[a.detected_type]   ?? TYPE_MAP.unknown;
+                const statusInfo = STATUS_MAP[a.status]       ?? STATUS_MAP.pending;
+                const roleInfo  = a.created_by_role ? ROLE_BADGE[a.created_by_role] : null;
+                return (
+                  <tr key={a.id} className="hover:bg-white/5 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {a.detected_type === "pdf"
+                          ? <FileText className="w-4 h-4 text-amber-300/60 shrink-0" />
+                          : <FileSpreadsheet className="w-4 h-4 text-blue-300/50 shrink-0" />}
+                        <div className="min-w-0">
+                          <a href={`/analises/${a.id}`}
+                            className="text-white/90 hover:text-white font-medium truncate block max-w-[220px] transition-colors">
+                            {a.original_filename}
+                          </a>
+                          {a.description && (
+                            <p className="text-xs text-blue-200/40 truncate max-w-[220px]">{a.description}</p>
+                          )}
+                          {a.tags && a.tags.length > 0 && (
+                            <div className="flex gap-1 flex-wrap mt-0.5">
+                              {a.tags.map(t => (
+                                <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-400/10 text-blue-300/70 border border-blue-400/15">{t}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${typeInfo.cls}`}>
+                        {typeInfo.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${statusInfo.cls}`}>
+                        {statusInfo.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-blue-200/60 tabular-nums">
+                      {a.total_rows.toLocaleString("pt-BR")}
+                    </td>
+                    <td className="px-4 py-3">
+                      {a.created_by ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs text-blue-200/70">{a.created_by}</span>
+                          {roleInfo && (
+                            <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded border ${roleInfo.cls}`}>
+                              <ShieldCheck className="w-2.5 h-2.5" />
+                              {roleInfo.label}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-white/20 italic text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-blue-200/50 whitespace-nowrap text-xs">
+                      {fmtDate(a.created_at)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-between text-xs text-blue-200/50">
+          <span>Página {page} de {totalPages}</span>
+          <div className="flex gap-1">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="p-1.5 rounded hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="p-1.5 rounded hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -793,10 +1009,22 @@ export default function AdminPage() {
             <ShieldCheck className="w-4 h-4" />
             Histórico de acessos
           </button>
+          <button
+            onClick={() => setActiveTab("arquivos")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+              activeTab === "arquivos"
+                ? "bg-[#003A70] text-white"
+                : "text-blue-200/60 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Histórico de arquivos
+          </button>
         </div>
 
         {activeTab === "usuarios" && <UsuariosTab />}
         {activeTab === "acessos" && <AcessosTab />}
+        {activeTab === "arquivos" && <ArquivosTab />}
       </main>
       <AppFooter />
     </div>

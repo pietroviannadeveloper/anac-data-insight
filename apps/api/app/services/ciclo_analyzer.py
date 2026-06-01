@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import unicodedata
 import polars as pl
+from app.services.classifier import classify_row_type
 
 
 _EMPTY_VALUES = {"", "indefinido", "a definir", "a definir ", "indefinido ", "-", "n/a"}
@@ -161,3 +162,42 @@ def analyze_ciclos(df: pl.DataFrame) -> dict:
         "taxa_agendamento": taxa_agendamento,
         "pendencias_criticas": pendencias_criticas,
     }
+
+
+def _classify_rows(df: pl.DataFrame) -> list[str]:
+    """Return a list of TipoCiclo for each row using the Item column."""
+    mapping = _norm_cols(df)
+    col_item = _find_col(mapping, "item")
+    tipos: list[str] = []
+    for i in range(len(df)):
+        if col_item:
+            raw = df[col_item][i]
+            val = str(raw) if raw is not None else None
+        else:
+            val = None
+        tipo, _ = classify_row_type(val)
+        tipos.append(tipo)
+    return tipos
+
+
+def analyze_ciclos_with_breakdown(df: pl.DataFrame) -> dict:
+    """
+    Run analyze_ciclos on the full dataframe and also compute per-tipo_ciclo
+    indicators. Returns the standard indicators dict with an extra 'by_type' key.
+    """
+    global_indicators = analyze_ciclos(df)
+
+    tipos = _classify_rows(df)
+    tipo_series = pl.Series("_tipo_ciclo", tipos)
+    df_typed = df.with_columns(tipo_series)
+
+    by_type: dict[str, dict] = {}
+    for tipo in ("CICLO_BASE", "CICLO_DESEMPENHO", "NAO_PROGRAMADA", "INDEFINIDO"):
+        sub = df_typed.filter(pl.col("_tipo_ciclo") == tipo).drop("_tipo_ciclo")
+        if len(sub) == 0:
+            continue
+        sub_indicators = analyze_ciclos(sub)
+        by_type[tipo] = sub_indicators
+
+    global_indicators["by_type"] = by_type
+    return global_indicators

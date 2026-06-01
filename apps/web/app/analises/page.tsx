@@ -5,9 +5,28 @@ import Link from "next/link";
 import AppHeader from "@/components/layout/AppHeader";
 import AppFooter from "@/components/layout/AppFooter";
 import EmptyState from "@/components/ui/EmptyState";
-import { BarChart2, Upload, RefreshCw, FileSpreadsheet, CheckCircle, Clock, AlertCircle, Loader2, Trash2 } from "lucide-react";
+import { BarChart2, Upload, RefreshCw, FileSpreadsheet, CheckCircle, Clock, AlertCircle, Loader2, Trash2, FileText, PieChart, ShieldCheck, User } from "lucide-react";
 import { api } from "@/lib/api";
 import { Analysis } from "@/types/analysis";
+
+function RoleBadge({ role }: { role?: string | null }) {
+  if (role === "admin") return (
+    <span title="Administrador" className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-400/15 text-purple-300 border border-purple-400/20">
+      <ShieldCheck className="w-2.5 h-2.5" /> admin
+    </span>
+  );
+  if (role === "analyst") return (
+    <span title="Analista" className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-400/15 text-blue-300 border border-blue-400/20">
+      <User className="w-2.5 h-2.5" /> analyst
+    </span>
+  );
+  if (role === "viewer") return (
+    <span title="Visualizador" className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-white/10 text-white/40 border border-white/15">
+      <User className="w-2.5 h-2.5" /> viewer
+    </span>
+  );
+  return null;
+}
 
 const STATUS_CONFIG = {
   completed: { label: "Concluída", icon: CheckCircle, color: "text-emerald-400 bg-emerald-400/15 border-emerald-400/25" },
@@ -17,8 +36,9 @@ const STATUS_CONFIG = {
 };
 
 const TYPE_LABEL: Record<string, string> = {
-  ciclos: "Ciclos de Fiscalização",
-  generic: "Genérico",
+  ciclos:  "Ciclos de Fiscalização",
+  generic: "Planilha Genérica",
+  pdf:     "Documento PDF",
   unknown: "Desconhecido",
 };
 
@@ -127,6 +147,7 @@ export default function AnalisesPage() {
                   <th className="text-left px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Tipo</th>
                   <th className="text-left px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Status</th>
                   <th className="text-right px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Linhas</th>
+                  <th className="text-left px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Criado por</th>
                   <th className="text-left px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Data</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -136,17 +157,52 @@ export default function AnalisesPage() {
                   <tr key={a.id} className="hover:bg-white/5 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <FileSpreadsheet className="w-4 h-4 text-blue-300/50 flex-shrink-0" />
+                        {a.detected_type === "pdf"
+                          ? <FileText className="w-4 h-4 text-amber-300/60 flex-shrink-0" />
+                          : <FileSpreadsheet className="w-4 h-4 text-blue-300/50 flex-shrink-0" />
+                        }
                         <span className="font-medium text-white truncate max-w-xs">{a.original_filename}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-blue-200/55">{TYPE_LABEL[a.detected_type] ?? a.detected_type}</td>
                     <td className="px-4 py-3"><StatusBadge status={a.status} /></td>
                     <td className="px-4 py-3 text-right text-blue-200/70">{a.total_rows.toLocaleString("pt-BR")}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {a.created_by ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-blue-200/60 text-xs">{a.created_by}</span>
+                          <RoleBadge role={(a as Analysis & { created_by_role?: string }).created_by_role} />
+                        </div>
+                      ) : (
+                        <span className="text-white/20 italic text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-blue-200/50 whitespace-nowrap">{formatDate(a.created_at)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-3">
-                        <Link href={`/analises/${a.id}`} className="text-blue-300 hover:text-white font-medium text-xs transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2 flex-wrap">
+                        {/* Visualizar BI — só para ciclos concluídos */}
+                        {a.detected_type === "ciclos" && a.status === "completed" && (
+                          <Link
+                            href={`/dashboard?analysis_id=${a.id}`}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-purple-300 bg-purple-400/10 border border-purple-400/25 rounded-lg hover:bg-purple-400/20 transition-colors whitespace-nowrap"
+                            title="Abrir dashboard filtrado por esta análise"
+                          >
+                            <PieChart className="w-3 h-3" /> Visualizar BI
+                          </Link>
+                        )}
+
+                        {/* Ver relatório PDF — só para PDFs concluídos */}
+                        {a.detected_type === "pdf" && a.status === "completed" && (
+                          <Link
+                            href={`/relatorios?analysis_id=${a.id}`}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-amber-300 bg-amber-400/10 border border-amber-400/25 rounded-lg hover:bg-amber-400/20 transition-colors whitespace-nowrap"
+                            title="Ver relatório deste PDF"
+                          >
+                            <FileText className="w-3 h-3" /> Ver relatório
+                          </Link>
+                        )}
+
+                        <Link href={`/analises/${a.id}`} className="text-blue-300 hover:text-white font-medium text-xs transition-colors whitespace-nowrap">
                           Ver →
                         </Link>
                         <button

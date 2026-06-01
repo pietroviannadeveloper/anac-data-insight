@@ -25,9 +25,20 @@ class AnalysisResponse(BaseModel):
     total_rows: int
     total_columns: int
     indicators: Optional[dict] = None
+    description: Optional[str] = None
+    tags: Optional[list[str]] = None
+    parent_analysis_id: Optional[str] = None
+    version: Optional[int] = None
+    created_by: Optional[str] = None
+    created_by_role: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
+
+
+class AnalysisUpdate(BaseModel):
+    description: Optional[str] = None
+    tags: Optional[list[str]] = None
 
 
 class PaginatedAnalysesResponse(BaseModel):
@@ -79,8 +90,13 @@ class TreatedDataRow(BaseModel):
     sem_pcdp: int = 0
     sem_processo: int = 0
     local_indefinido: int = 0
+    tipo_ciclo: Optional[str] = None
+    criterio_classificacao: Optional[str] = None
 
 
 class TreatedDataResponse(BaseModel):
     items: list[TreatedDataRow]
     total: int
+    page: int
+    page_size: int
+    total_pages: int
