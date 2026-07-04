@@ -8,12 +8,13 @@ interface SkeletonProps {
   style?: React.CSSProperties;
 }
 
-export const Skeleton = ({ className }: SkeletonProps) => (
+export const Skeleton = ({ className, style }: SkeletonProps) => (
   <div
     className={cn(
-      "animate-pulse rounded-md bg-white/8",
+      "animate-shimmer rounded-md",
       className
     )}
+    style={style}
   />
 );
 

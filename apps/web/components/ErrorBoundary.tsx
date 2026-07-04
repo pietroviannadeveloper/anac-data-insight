@@ -30,7 +30,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
     if (!this.state.hasError) return this.props.children;
 
     return (
-      <div className="flex flex-col min-h-screen bg-[#00112b] items-center justify-center px-4">
+      <div className="flex flex-col min-h-screen items-center justify-center px-4">
         <div className="text-center max-w-md">
           <div className="flex justify-center mb-6">
             <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">

@@ -111,11 +111,27 @@
 
 ---
 
+## ✅ v0.6.5 — Experiência visual e assistente IA — Concluído (2026-07-04)
+
+- [x] Redesign da tela de login como tela de boas-vindas: fundo fotográfico de aviação otimizado (`public/login-sky2.jpg`), véu de contraste, card em glassmorphism, animações de entrada escalonadas e esquadrilha de aviões interativa que segue o cursor (`PlaneSwarm`)
+- [x] Identidade visual estendida a todo o sistema: céu em degradê global no `body` + rotas aéreas sutis compartilhadas (`SkyBackdrop` no layout raiz), header glass com backdrop-blur, footer translúcido, skeletons com shimmer (e correção da prop `style` ignorada), empty states redesenhados
+- [x] Limpeza visual das telas densas: painel de planilhas e seções Servidores/PCDPs recolhíveis em `/ptamensal` (`CollapsibleCard`), tabela de atividades com cabeçalho fixo e scroll interno (70vh), chips sem borda, orientações de pendências atrás de "Como tratar" (`<details>` nativo) — página caiu de ~5.900px para ~2.400px sem remover nenhum dado
+- [x] Assistente IA (bolha de avião) evoluído para copiloto: histórico multi-turn enviado ao backend (`history` no `/chat/page`), contexto agregado do banco montado automaticamente no modo `geral` (dados reais em qualquer página, nunca dados brutos), respostas em markdown com links internos de navegação, conversa persistente na sessão e botão copiar
+- [x] Briefing executivo: endpoint `GET /dashboard/briefing/pptx` (refactor `_compute_briefing`), download do PPTX e envio por e-mail/Outlook na página `/briefing`
+
+---
+
 ## v0.8 — Inteligência avançada (futuro)
 
 - Detecção de anomalias (queda de execução, concentração de atrasos)
 - Forecast de execução do PTA
 - Benchmarking entre períodos, gerências e cidades
+
+### Assistente IA — evoluções sugeridas
+
+- Respostas em streaming (SSE) no chat, com texto aparecendo em tempo real — exige refatorar `/chat/page` para server-sent events
+- Chat com ações: a IA aplicar filtros e executar operações nas páginas a partir da conversa (function calling) — hoje ela apenas navega via links; exige definir um contrato de ações entre chat e páginas
+- Evoluir o ⌘K de busca de análises para command palette completa (navegação, ações e busca unificadas)
 
 ---
 

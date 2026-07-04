@@ -26,6 +26,7 @@ const defaultProps = {
 describe("AIChat", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    sessionStorage.clear();
   });
 
   it("renders the floating trigger button", () => {
@@ -104,6 +105,7 @@ describe("AIChat", () => {
       question: "Qual a taxa de execução?",
       page_type: "ptamensal",
       context: defaultProps.contextData,
+      history: [],
     });
   });
 

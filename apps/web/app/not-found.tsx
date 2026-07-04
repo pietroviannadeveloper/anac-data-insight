@@ -3,7 +3,7 @@ import { Home, ArrowLeft, SearchX } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <div className="flex flex-col min-h-screen bg-[#00112b] items-center justify-center px-4">
+    <div className="flex flex-col min-h-screen items-center justify-center px-4">
       <div className="text-center max-w-md">
         {/* Ícone */}
         <div className="flex justify-center mb-6">

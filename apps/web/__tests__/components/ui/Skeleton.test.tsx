@@ -3,21 +3,21 @@ import { render, screen, within } from "@testing-library/react";
 import { Skeleton, SkeletonCard, SkeletonTable, SkeletonDashboard } from "@/components/ui/Skeleton";
 
 describe("Skeleton", () => {
-  it("renders a div with animate-pulse class", () => {
+  it("renders a div with animate-shimmer class", () => {
     const { container } = render(<Skeleton />);
-    expect(container.firstChild).toHaveClass("animate-pulse");
+    expect(container.firstChild).toHaveClass("animate-shimmer");
   });
 
   it("merges additional className", () => {
     const { container } = render(<Skeleton className="h-4 w-20" />);
-    expect(container.firstChild).toHaveClass("h-4", "w-20", "animate-pulse");
+    expect(container.firstChild).toHaveClass("h-4", "w-20", "animate-shimmer");
   });
 });
 
 describe("SkeletonCard", () => {
   it("renders three skeleton bars inside a card", () => {
     const { container } = render(<SkeletonCard />);
-    const skeletons = container.querySelectorAll(".animate-pulse");
+    const skeletons = container.querySelectorAll(".animate-shimmer");
     expect(skeletons.length).toBe(3);
   });
 });

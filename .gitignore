@@ -54,3 +54,9 @@ coverage.xml
 
 # Misc
 *.log
+
+# Tooling local de agentes (específico da máquina)
+.maestri/
+.claude/worktrees/
+.agents/
+.claude/skills/

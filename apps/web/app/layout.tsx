@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 import PageWrapper from "@/components/layout/PageWrapper";
+import SkyBackdrop from "@/components/layout/SkyBackdrop";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -19,7 +20,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className={`${inter.variable} font-sans min-h-screen bg-[#00112b]`}>
+      <body className={`${inter.variable} font-sans min-h-screen`}>
+        <SkyBackdrop />
         <ErrorBoundary>
           <PageWrapper>{children}</PageWrapper>
         </ErrorBoundary>

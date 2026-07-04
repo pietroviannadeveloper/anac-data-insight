@@ -253,10 +253,16 @@ _PAGE_PROMPTS: dict[str, str] = {
 }
 
 
+class ChatTurn(BaseModel):
+    role: str
+    text: str
+
+
 class PageChatRequest(BaseModel):
     question: str
     page_type: str
     context: dict
+    history: list[ChatTurn] = []
 
 
 class PageChatResponse(BaseModel):
@@ -306,26 +312,51 @@ async def _call_ai(prompt: str) -> tuple[str, str]:
     )
 
 
+# Instrução compartilhada: formatação e navegação por links internos do sistema
+_NAV_HINT = (
+    "\nFormate a resposta com markdown simples: **negrito** para números-chave e listas com '-'.\n"
+    "Quando for útil ao usuário, aponte páginas do sistema usando links markdown internos: "
+    "[Acompanhamento PTA](/ptamensal), [Histórico PTA](/pta/historico), [Pendências](/pendencias), "
+    "[Análises](/analises), [Ciclos](/ciclos), [Briefing](/briefing), [Dashboard](/dashboard)."
+)
+
+
 @router.post("/chat/page", response_model=PageChatResponse, tags=["Chat"])
 async def chat_with_page_context(
     body: PageChatRequest,
     _: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
-    Recebe uma pergunta e um contexto de indicadores já computados pela página
-    (nunca dados brutos) e retorna uma resposta em linguagem natural.
-    page_type: 'ptamensal' | 'pta_historico'
+    Recebe uma pergunta, um contexto de indicadores já computados pela página
+    (nunca dados brutos) e o histórico da conversa; retorna resposta em linguagem natural.
+    page_type: 'ptamensal' | 'pta_historico' | 'geral'
     """
     if not body.question.strip():
         raise HTTPException(status_code=400, detail="A pergunta não pode estar vazia.")
 
     system_prompt = _PAGE_PROMPTS.get(body.page_type, _PAGE_PROMPTS["ptamensal"])
-    context_str = json.dumps(body.context, ensure_ascii=False, indent=2)
+
+    # No modo geral sem contexto da página, monta um resumo agregado do banco
+    # para que o assistente responda com dados reais em qualquer tela.
+    if body.page_type == "geral" and not body.context:
+        try:
+            context_str, _scope = _build_context(None, db)
+        except Exception:
+            context_str = "{}"
+    else:
+        context_str = json.dumps(body.context, ensure_ascii=False, indent=2)
+
+    history = body.history[-8:]
+    history_str = "".join(
+        f"\n{'Usuário' if t.role == 'user' else 'Assistente'}: {t.text}" for t in history
+    )
 
     prompt = (
-        f"{system_prompt}\n\n"
-        f"INDICADORES DA PÁGINA:\n{context_str}\n\n"
-        f"PERGUNTA: {body.question.strip()}\n\n"
+        f"{system_prompt}{_NAV_HINT}\n\n"
+        f"INDICADORES DA PÁGINA:\n{context_str}\n"
+        + (f"\nCONVERSA ANTERIOR:{history_str}\n" if history_str else "")
+        + f"\nPERGUNTA: {body.question.strip()}\n\n"
         "RESPOSTA:"
     )
 

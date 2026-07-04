@@ -278,7 +278,14 @@ export default function PendenciasPage() {
                       </td>
                       <td className="px-4 py-3 text-blue-200/60 text-xs max-w-[260px]">
                         <p>{p.motivo}</p>
-                        <p className="text-blue-200/40 italic mt-1">{p.recomendacao}</p>
+                        {p.recomendacao && (
+                          <details className="mt-1">
+                            <summary className="text-blue-300/50 text-[11px] cursor-pointer hover:text-blue-300/80 transition-colors select-none">
+                              Como tratar
+                            </summary>
+                            <p className="text-blue-200/40 italic mt-1">{p.recomendacao}</p>
+                          </details>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {editingId === p.id ? (

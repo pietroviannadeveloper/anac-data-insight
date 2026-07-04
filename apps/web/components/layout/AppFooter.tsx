@@ -1,6 +1,6 @@
 export default function AppFooter() {
   return (
-    <footer className="bg-[#00112b] border-t border-white/8 mt-auto">
+    <footer className="border-t border-white/8 bg-black/20 backdrop-blur-sm mt-auto">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-4 text-xs text-blue-200/50">

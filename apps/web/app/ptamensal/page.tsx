@@ -35,6 +35,7 @@ import {
   XCircle,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Search,
   RefreshCw,
   BarChart2,
@@ -218,7 +219,7 @@ interface ActivitiesPage {
 function TipoBadge({ tipo }: { tipo: string }) {
   const label = TIPOS.find((t) => t.value === tipo)?.label ?? tipo;
   return (
-    <span className={`text-xs px-2 py-0.5 rounded border font-medium ${TIPO_COLORS[tipo] ?? "bg-white/10 text-white/60 border-white/20"}`}>
+    <span className={`text-xs px-2 py-0.5 rounded font-medium ${TIPO_COLORS[tipo] ?? "bg-white/10 text-white/60"}`}>
       {label}
     </span>
   );
@@ -242,6 +243,38 @@ function SituacaoBadge({ situacao }: { situacao: string }) {
 /** "rafael.koeler" → "Rafael Koeler" */
 function formatServidor(s: string): string {
   return s.replace(/\./g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Card com cabeçalho clicável que expande/recolhe o conteúdo (limpeza visual). */
+function CollapsibleCard({
+  title,
+  summary,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  summary?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="mb-8 bg-white/4 rounded-xl border border-white/8 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-white/4 transition-colors"
+      >
+        <h3 className="text-sm font-semibold text-white/80">{title}</h3>
+        {summary}
+        <ChevronDown
+          className={`w-4 h-4 text-white/40 ml-auto shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && children}
+    </div>
+  );
 }
 
 const PCDP_TIPO_META: Record<string, { label: string; color: string }> = {
@@ -271,6 +304,15 @@ export default function PTAMensalPage() {
   // uploads
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [loadingUploads, setLoadingUploads] = useState(true);
+  // Painel de planilhas começa recolhido quando já há uploads (limpeza visual)
+  const [uploadsOpen, setUploadsOpen] = useState(false);
+  const uploadsInitRef = useRef(false);
+  useEffect(() => {
+    if (!loadingUploads && !uploadsInitRef.current) {
+      uploadsInitRef.current = true;
+      setUploadsOpen(uploads.length === 0);
+    }
+  }, [loadingUploads, uploads]);
 
   // summary/BI
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -809,13 +851,38 @@ export default function PTAMensalPage() {
         </div>
 
 
-        {/* ── Upload section ─────────────────────────────────────── */}
-        <section className="mb-8 bg-white/4 rounded-xl border border-white/8 p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <Upload className="w-5 h-5 text-blue-400" />
+        {/* ── Upload section (recolhível) ─────────────────────────── */}
+        <section className="mb-8 bg-white/4 rounded-xl border border-white/8">
+          <button
+            type="button"
+            onClick={() => setUploadsOpen((v) => !v)}
+            aria-expanded={uploadsOpen}
+            className="w-full flex items-center gap-3 px-6 py-4 text-left hover:bg-white/4 transition-colors rounded-xl"
+          >
+            <Upload className="w-5 h-5 text-blue-400 shrink-0" />
             <h2 className="text-base font-semibold text-white">Planilhas do PTA 2026</h2>
-            <span className="text-xs text-white/30">Substituir planilha: envie uma nova do mesmo tipo</span>
-          </div>
+            {!loadingUploads && (
+              <span className="text-xs text-white/40">
+                {uploads.length} de {TIPOS.length} enviadas
+                {uploads.length > 0 &&
+                  ` · atualizado ${new Date(
+                    Math.max(...uploads.map((u) => new Date(u.created_at).getTime()))
+                  ).toLocaleDateString("pt-BR")}`}
+              </span>
+            )}
+            {filterTipoBI && !uploadsOpen && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300">
+                filtro ativo
+              </span>
+            )}
+            <ChevronDown
+              className={`w-4 h-4 text-white/40 ml-auto shrink-0 transition-transform ${uploadsOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {uploadsOpen && (
+          <div className="px-6 pb-6">
+          <p className="text-xs text-white/30 -mt-1 mb-4">Substituir planilha: envie uma nova do mesmo tipo</p>
 
           {/* Current uploads */}
           {loadingUploads ? (
@@ -934,6 +1001,8 @@ export default function PTAMensalPage() {
             <p className="mt-2 text-emerald-400 text-xs flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" />{uploadSuccess}
             </p>
+          )}
+          </div>
           )}
         </section>
 
@@ -1153,11 +1222,11 @@ export default function PTAMensalPage() {
 
             {/* Servidores table */}
             {bi.por_servidor.length > 0 && (
-              <div className="mb-8 bg-white/4 rounded-xl border border-white/8 overflow-hidden">
-                <div className="px-5 py-3 border-b border-white/8">
-                  <h3 className="text-sm font-semibold text-white/80">Servidores</h3>
-                </div>
-                <div className="overflow-x-auto">
+              <CollapsibleCard
+                title="Servidores"
+                summary={<span className="text-xs text-white/30">{bi.por_servidor.length}</span>}
+              >
+                <div className="overflow-x-auto border-t border-white/8">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-white/8 text-xs text-white/40">
@@ -1178,15 +1247,11 @@ export default function PTAMensalPage() {
                           <td className="px-4 py-2 text-right text-white/40 text-[10px] font-mono">{s.servidor}</td>
                           <td className="px-4 py-2">
                             {(s.cidades_mes_vigente ?? []).length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {s.cidades_mes_vigente.map((c) => (
-                                  <span key={c} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-400/20 whitespace-nowrap">
-                                    {c}
-                                  </span>
-                                ))}
-                              </div>
+                              <span className="text-xs text-blue-200/70">
+                                {s.cidades_mes_vigente.join(" · ")}
+                              </span>
                             ) : (
-                              <span className="text-white/25 text-xs italic">Sem local de atividade este mês</span>
+                              <span className="text-white/25 text-xs italic">—</span>
                             )}
                           </td>
                           <td className="px-4 py-2 text-right text-white/60 tabular-nums">{s.total}</td>
@@ -1203,31 +1268,30 @@ export default function PTAMensalPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </CollapsibleCard>
             )}
 
             {/* PCDP stats */}
             {bi && (bi.total_com_pcdp_valida ?? 0) + Object.values(bi.pcdp_por_tipo ?? {}).reduce((a,b) => a+b, 0) > 0 && (
-              <div className="mb-8 bg-white/4 rounded-xl border border-white/8 overflow-hidden">
-                <div className="px-5 py-3 border-b border-white/8">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-sm font-semibold text-white/80">PCDPs</h3>
-                    <span className="text-xs text-white/30">
-                      {bi.unique_pcdps ?? 0} números únicos · {bi.pcdp_duplicadas ?? 0} duplicadas
-                    </span>
-                  </div>
-                  <div className="flex gap-3 flex-wrap">
-                    {Object.entries(bi.pcdp_por_tipo ?? {}).map(([tipo, count]) => count > 0 && (
-                      <span key={tipo} className="flex items-center gap-1.5 text-xs">
-                        <span className={PCDP_TIPO_META[tipo]?.color ?? "text-white/40"}>
-                          {PCDP_TIPO_META[tipo]?.label ?? tipo}:
-                        </span>
-                        <strong className="text-white/70 tabular-nums">{count}</strong>
+              <CollapsibleCard
+                title="PCDPs"
+                summary={
+                  <span className="text-xs text-white/30">
+                    {bi.unique_pcdps ?? 0} únicas · {bi.pcdp_duplicadas ?? 0} duplicadas
+                  </span>
+                }
+              >
+                <div className="px-5 py-3 border-t border-white/8 flex gap-3 flex-wrap">
+                  {Object.entries(bi.pcdp_por_tipo ?? {}).map(([tipo, count]) => count > 0 && (
+                    <span key={tipo} className="flex items-center gap-1.5 text-xs">
+                      <span className={PCDP_TIPO_META[tipo]?.color ?? "text-white/40"}>
+                        {PCDP_TIPO_META[tipo]?.label ?? tipo}:
                       </span>
-                    ))}
-                  </div>
+                      <strong className="text-white/70 tabular-nums">{count}</strong>
+                    </span>
+                  ))}
                 </div>
-                <div className="overflow-x-auto max-h-52 overflow-y-auto">
+                <div className="overflow-x-auto max-h-52 overflow-y-auto border-t border-white/8">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-[#001E3C]">
                       <tr className="border-b border-white/8 text-white/40">
@@ -1243,7 +1307,7 @@ export default function PTAMensalPage() {
                           <td className="px-4 py-1.5 text-right text-white/60 tabular-nums">{p.total}</td>
                           <td className="px-4 py-1.5">
                             {p.total > 1 && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-300 border border-yellow-500/20">duplicada</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-300">duplicada</span>
                             )}
                           </td>
                         </tr>
@@ -1251,7 +1315,7 @@ export default function PTAMensalPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </CollapsibleCard>
             )}
           </>
         )}
@@ -1367,10 +1431,10 @@ export default function PTAMensalPage() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[70vh]">
                 <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-white/8 bg-white/3 text-white/40">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="border-b border-white/8 bg-[#0a1f3f] text-white/40">
                       <th className="px-3 py-2.5 text-left font-medium">Item</th>
                       <th className="px-3 py-2.5 text-left font-medium">Atividade</th>
                       <th className="px-3 py-2.5 text-left font-medium">Gerência</th>
@@ -1401,10 +1465,10 @@ export default function PTAMensalPage() {
                         <td className="px-3 py-2"><TipoBadge tipo={a.tipo_ciclo} /></td>
                         <td className="px-3 py-2">
                           <div className="flex gap-1 flex-wrap">
-                            {a.sem_giaso === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/20">Sem GIASO</span>}
-                            {a.sem_pcdp === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/20">Sem PCDP</span>}
-                            {a.sem_processo === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-300 border border-yellow-500/20">Sem Proc.</span>}
-                            {a.local_indefinido === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/40 border border-white/15">Local Indef.</span>}
+                            {a.sem_giaso === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300">Sem GIASO</span>}
+                            {a.sem_pcdp === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300">Sem PCDP</span>}
+                            {a.sem_processo === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-300">Sem Proc.</span>}
+                            {a.local_indefinido === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/40">Local Indef.</span>}
                           </div>
                         </td>
                       </tr>

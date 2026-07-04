@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Plane, X, Send, Loader2, User, Sparkles, ChevronDown, RefreshCw } from "lucide-react";
+import { Plane, X, Send, Loader2, User, Sparkles, ChevronDown, RefreshCw, Copy, Check } from "lucide-react";
 import { api } from "@/lib/api";
 
 const BTN_SIZE = 56;
@@ -65,16 +65,125 @@ const DEFAULT_SUGGESTIONS: Record<string, string[]> = {
     "Como o desempenho de 2024 se compara aos anos anteriores?",
   ],
   geral: [
+    "Como está a execução geral das atividades?",
+    "Quais empresas concentram mais pendências?",
+    "Quais gerências têm mais atividades?",
     "O que posso fazer nesta plataforma?",
-    "Como faço upload e análise de uma planilha?",
-    "Onde vejo o histórico do PTA?",
-    "Como funciona o planejamento do PTA?",
   ],
 };
 
+/** Renderiza texto em [nós React] com **negrito**, `código` e links internos. */
+function renderInline(text: string): React.ReactNode[] {
+  const regex = /(\*\*[^*]+\*\*|\[[^\]]+\]\([^)\s]+\)|`[^`]+`)/g;
+  const nodes: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let k = 0;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    const tok = m[0];
+    if (tok.startsWith("**")) {
+      nodes.push(<strong key={k++} className="text-white font-semibold">{tok.slice(2, -2)}</strong>);
+    } else if (tok.startsWith("`")) {
+      nodes.push(<code key={k++} className="bg-white/10 px-1 py-0.5 rounded text-[12px]">{tok.slice(1, -1)}</code>);
+    } else {
+      const label = tok.slice(1, tok.indexOf("]"));
+      const href = tok.slice(tok.indexOf("](") + 2, -1);
+      nodes.push(
+        href.startsWith("/") ? (
+          <a key={k++} href={href} className="text-blue-300 underline underline-offset-2 hover:text-blue-200 transition-colors">
+            {label}
+          </a>
+        ) : (
+          <span key={k++}>{label}</span>
+        )
+      );
+    }
+    last = m.index + tok.length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
+/** Markdown leve para respostas da IA: parágrafos, listas, títulos e inline. */
+function MarkdownLite({ text }: { text: string }) {
+  const lines = text.split("\n");
+  const blocks: React.ReactNode[] = [];
+  let list: string[] = [];
+  let key = 0;
+
+  const flushList = () => {
+    if (list.length === 0) return;
+    blocks.push(
+      <ul key={key++} className="list-disc pl-4 space-y-1">
+        {list.map((item, i) => <li key={i}>{renderInline(item)}</li>)}
+      </ul>
+    );
+    list = [];
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const listMatch = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)/);
+    if (listMatch) {
+      list.push(listMatch[1]);
+      continue;
+    }
+    flushList();
+    if (!line.trim()) continue;
+    const heading = line.match(/^#{1,4}\s+(.*)/);
+    if (heading) {
+      blocks.push(<p key={key++} className="font-semibold text-white/90">{renderInline(heading[1])}</p>);
+    } else {
+      blocks.push(<p key={key++}>{renderInline(line)}</p>);
+    }
+  }
+  flushList();
+  return <div className="space-y-2">{blocks}</div>;
+}
+
+/** Botão de copiar resposta com feedback visual. */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard?.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }).catch(() => {});
+      }}
+      aria-label="Copiar resposta"
+      className="mt-1 p-1 rounded text-white/20 hover:text-white/60 transition-colors"
+    >
+      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+    </button>
+  );
+}
+
+const HISTORY_STORAGE_PREFIX = "anac_ai_chat_history_";
+
+function loadHistory(pageType: string): Message[] {
+  try {
+    const raw = sessionStorage.getItem(HISTORY_STORAGE_PREFIX + pageType);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.slice(-40);
+    }
+  } catch {}
+  return [];
+}
+
 function AIChatInner({ pageType, contextData, suggestedQuestions }: AIChatProps) {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => loadHistory(pageType));
+
+  // Persiste a conversa na sessão — sobrevive à navegação entre páginas
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(HISTORY_STORAGE_PREFIX + pageType, JSON.stringify(messages.slice(-40)));
+    } catch {}
+  }, [messages, pageType]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
@@ -169,6 +278,7 @@ function AIChatInner({ pageType, contextData, suggestedQuestions }: AIChatProps)
         question: question.trim(),
         page_type: pageType,
         context: contextData ?? {},
+        history: messages.slice(-8).map((m) => ({ role: m.role, text: m.text })),
       });
       setMessages((prev) => [...prev, { role: "assistant", text: res.answer }]);
     } catch (err: unknown) {
@@ -177,7 +287,7 @@ function AIChatInner({ pageType, contextData, suggestedQuestions }: AIChatProps)
     } finally {
       setLoading(false);
     }
-  }, [loading, pageType, contextData]);
+  }, [loading, pageType, contextData, messages]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -190,9 +300,10 @@ function AIChatInner({ pageType, contextData, suggestedQuestions }: AIChatProps)
     setMessages([]);
     setShowSuggestions(true);
     setInput("");
+    try { sessionStorage.removeItem(HISTORY_STORAGE_PREFIX + pageType); } catch {}
   };
 
-  const pageLabel = pageType === "ptamensal" ? "PTA Mensal 2026" : pageType === "pta_historico" ? "Histórico PTA" : "Assistente ANAC";
+  const pageLabel = pageType === "ptamensal" ? "PTA Mensal 2026" : pageType === "pta_historico" ? "Histórico PTA" : "Dados de toda a plataforma";
 
   return (
     <>
@@ -275,7 +386,7 @@ function AIChatInner({ pageType, contextData, suggestedQuestions }: AIChatProps)
                 </div>
                 <div className="bg-[#003A70]/20 border border-blue-900/40 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-white/60 max-w-[88%] leading-relaxed">
                   Olá! Analiso os dados desta página em tempo real. Escolha uma sugestão ou faça sua própria pergunta.
-                  {!contextData && (
+                  {!contextData && pageType !== "geral" && (
                     <span className="block mt-2 text-orange-400/60 text-xs">
                       ⚠ Aguardando dados da página...
                     </span>
@@ -299,14 +410,17 @@ function AIChatInner({ pageType, contextData, suggestedQuestions }: AIChatProps)
                     : <Plane className="w-3.5 h-3.5 text-white -rotate-45" />
                   }
                 </div>
-                <div className={`
-                  rounded-2xl px-4 py-3 text-sm max-w-[88%] whitespace-pre-wrap leading-relaxed
-                  ${msg.role === "user"
-                    ? "rounded-tr-sm bg-[#003A70]/40 border border-blue-500/20 text-blue-100"
-                    : "rounded-tl-sm bg-[#003A70]/20 border border-blue-900/40 text-white/75"
-                  }
-                `}>
-                  {msg.text}
+                <div className="max-w-[88%] min-w-0">
+                  <div className={`
+                    rounded-2xl px-4 py-3 text-sm leading-relaxed
+                    ${msg.role === "user"
+                      ? "rounded-tr-sm bg-[#003A70]/40 border border-blue-500/20 text-blue-100 whitespace-pre-wrap"
+                      : "rounded-tl-sm bg-[#003A70]/20 border border-blue-900/40 text-white/75"
+                    }
+                  `}>
+                    {msg.role === "assistant" ? <MarkdownLite text={msg.text} /> : msg.text}
+                  </div>
+                  {msg.role === "assistant" && !msg.text.startsWith("⚠️") && <CopyButton text={msg.text} />}
                 </div>
               </div>
             ))}

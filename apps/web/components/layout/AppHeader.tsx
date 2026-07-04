@@ -164,14 +164,14 @@ export default function AppHeader() {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   const navCls = (href: string) =>
-    `px-2.5 py-1.5 text-xs font-medium rounded whitespace-nowrap transition-colors duration-150 ${
+    `px-2.5 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-colors duration-150 ${
       isActive(href)
-        ? "bg-white/15 text-white font-semibold"
-        : "text-blue-100 hover:bg-[#0057A8] hover:text-white"
+        ? "bg-white/15 text-white font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+        : "text-blue-100/80 hover:bg-white/10 hover:text-white"
     }`;
 
   return (
-    <header className="sticky top-0 z-50 bg-[#003A70] border-b border-[#002550] shadow-md">
+    <header className="sticky top-0 z-50 bg-[#031430]/80 backdrop-blur-xl border-b border-white/10 shadow-lg shadow-black/20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-4">
           {/* Logo */}
@@ -203,13 +203,13 @@ export default function AppHeader() {
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <GlobalSearch />
             <button onClick={handleLogout}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors duration-150">
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-100/80 rounded-lg hover:bg-white/10 hover:text-white transition-colors duration-150">
               <LogOut className="w-3.5 h-3.5" /> Sair
             </button>
           </div>
 
           {/* Mobile menu button */}
-          <button className="md:hidden p-2 rounded text-blue-100 hover:bg-[#0057A8] hover:text-white transition-colors"
+          <button className="md:hidden p-2 rounded-lg text-blue-100 hover:bg-white/10 hover:text-white transition-colors"
             onClick={() => setMobileOpen(v => !v)} aria-label="Toggle menu">
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -218,22 +218,22 @@ export default function AppHeader() {
 
       {/* Mobile Nav */}
       {mobileOpen && (
-        <div className="md:hidden bg-[#002550] border-t border-[#003A70]">
+        <div className="md:hidden bg-[#031430]/95 backdrop-blur-xl border-t border-white/10">
           <nav className="px-4 py-2 flex flex-col gap-1">
             {navLinks.map((link) => (
               <Link key={link.href} href={link.href} onClick={() => setMobileOpen(false)}
-                className="px-3 py-2 text-sm font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors">
+                className="px-3 py-2 text-sm font-medium text-blue-100 rounded hover:bg-white/10 hover:text-white transition-colors">
                 {link.label}
               </Link>
             ))}
             {isAdmin && (
               <Link href="/admin" onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors">
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-100 rounded hover:bg-white/10 hover:text-white transition-colors">
                 <ShieldCheck className="w-4 h-4" /> Admin
               </Link>
             )}
             <button onClick={handleLogout}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-300 rounded hover:bg-[#0057A8] hover:text-white transition-colors">
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-300 rounded hover:bg-white/10 hover:text-white transition-colors">
               <LogOut className="w-4 h-4" /> Sair da conta
             </button>
           </nav>
