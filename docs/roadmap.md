@@ -66,15 +66,20 @@
 
 ## 🔄 v0.5 — Em andamento / próximos
 
-- [ ] Migração de SQLite para PostgreSQL em produção
-- [ ] Deploy em servidor interno ANAC
+- [x] Migração de SQLite para PostgreSQL em produção (já é o padrão em `config.py`, `docker-compose.yml` e Alembic)
+- [ ] Deploy público — **decidido**: frontend (`apps/web`) no **Vercel**, backend (`apps/api` + Postgres) no **Railway**, comunicação via rewrite same-origin do Next.js (`/api/*` → backend Railway). Detalhes e passo a passo em `docs/deploy.md` (a criar). Tarefas:
+  - [ ] Ajustar `apps/web/next.config.js`: usar variável server-side `BACKEND_API_URL` (sem prefixo `NEXT_PUBLIC_`) como destino do rewrite, deixando `NEXT_PUBLIC_API_URL` indefinida em produção
+  - [ ] Confirmar `secure=True` nos cookies quando `ENVIRONMENT=production`
+  - [ ] Configurar projeto Railway: build via `apps/api/Dockerfile`, plugin Postgres, volume persistente para `apps/api/uploads/` e `apps/api/generated/`, `WEB_CONCURRENCY=1` (rate limiter é in-memory por worker)
+  - [ ] Configurar projeto Vercel: root directory `apps/web`, env var `BACKEND_API_URL` apontando para o domínio gerado pelo Railway
+  - [ ] Criar `docs/deploy.md` com o passo a passo completo
 - [ ] Documentação de API (OpenAPI expandida)
 
 ---
 
 ## Backlog
 
-- Notificações por e-mail: resumo periódico do PTA, alertas críticos (infraestrutura de email_service.py já existe)
+
 - Integração com Power BI via conector dedicado
 - Upload em lote (múltiplos arquivos simultâneos)
 - Suporte a outros tipos de planilha (RBAC, certificações, fiscalizações)

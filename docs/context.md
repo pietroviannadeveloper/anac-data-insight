@@ -1372,4 +1372,153 @@ A nova tela deve ajudar a responder perguntas como:
 A visualização deve ser objetiva, com indicadores percentuais, gráficos, filtros e separação por tipo de planilha, facilitando a tomada de decisão e o acompanhamento operacional do PTA ao longo de 2026.
 
 
+ROADMAP UPDATE
+Você é um engenheiro de software sênior atuando como auditor técnico do projeto.
 
+Objetivo:
+Leia e analise o estado atual do repositório para identificar o que ainda falta para completarmos o roadmap até agora.
+
+Tarefa:
+1. Inspecione o projeto inteiro, incluindo:
+   - arquivos de roadmap, backlog, TODOs, issues locais ou documentos de planejamento;
+   - README, documentação técnica e arquivos de configuração;
+   - estrutura de pastas;
+   - código-fonte implementado;
+   - testes existentes;
+   - scripts, migrations, integrações e dependências.
+
+2. Compare o que está descrito no roadmap com o que já foi implementado no código.
+
+3. Identifique:
+   - itens do roadmap já concluídos;
+   - itens parcialmente implementados;
+   - itens ainda não iniciados;
+   - lacunas técnicas ou funcionais que não aparecem claramente no roadmap;
+   - riscos, bloqueios e dependências;
+   - testes, documentação ou validações que ainda faltam.
+
+4. Não altere nenhum arquivo neste momento. Faça apenas leitura e análise.
+
+Formato da resposta:
+Retorne um relatório em Markdown com as seguintes seções:
+
+# Diagnóstico do Roadmap
+
+## 1. Resumo executivo
+Explique em poucas frases o estado atual do projeto e o quanto o roadmap parece completo.
+
+## 2. Itens concluídos
+Liste os itens que parecem já estar implementados, citando os arquivos ou evidências encontrados.
+
+## 3. Itens parcialmente concluídos
+Para cada item, informe:
+- o que já existe;
+- o que ainda falta;
+- arquivos relacionados;
+- nível de prioridade: Alta, Média ou Baixa.
+
+## 4. Itens pendentes
+Liste o que ainda precisa ser feito para completar o roadmap.
+
+## 5. Lacunas não documentadas no roadmap
+Aponte coisas importantes que parecem faltar, mesmo que não estejam explicitamente escritas no roadmap.
+
+## 6. Riscos e bloqueios
+Liste riscos técnicos, dependências externas, ausência de testes, problemas de arquitetura ou decisões pendentes.
+
+## 7. Próximas ações recomendadas
+Crie uma lista priorizada de tarefas, em ordem de execução sugerida.
+
+## 8. Checklist final
+Monte um checklist objetivo no formato:
+- [ ] Tarefa
+- [ ] Tarefa
+- [ ] Tarefa
+
+
+
+
+---
+
+# Plano de Deploy — Vercel (web) + Railway (api)
+
+**Status: DECIDIDO, AGUARDANDO IMPLEMENTAÇÃO.**
+
+Diagnóstico completo em `docs/diagnostico-roadmap-2026-06-09.md`.
+
+## Decisão de arquitetura
+
+```
+Usuários ──► Vercel (apps/web, Next.js)
+                  │
+                  │ rewrite server-side /api/* (mesma origem, sem CORS)
+                  ▼
+              Railway (apps/api, FastAPI + Postgres + volume persistente)
+```
+
+O Vercel não é adequado para o backend (serverless = sem processo persistente,
+quebra o APScheduler de relatórios agendados e o rate limiter in-memory; filesystem
+efêmero perderia uploads/PDFs gerados). Por isso: **frontend no Vercel, backend no Railway**.
+
+O projeto já foi desenhado para o padrão "same-origin via rewrite":
+`apps/web/next.config.js` já tem `rewrites()` de `/api/*` → backend, e
+`apps/web/lib/api.ts` já usa URL relativa quando `NEXT_PUBLIC_API_URL` está vazio
+(comentário no código: "Empty string → relative URL → proxied by Next.js rewrites → sem cross-origin").
+Vamos manter esse padrão — evita complicações de CORS/cookies cross-site.
+
+## Mudanças de código necessárias
+
+1. **`apps/web/next.config.js`**: hoje usa `NEXT_PUBLIC_API_URL` como destino do
+   rewrite. Como variáveis `NEXT_PUBLIC_*` são embutidas no bundle do client, isso
+   faria `lib/api.ts` chamar o Railway diretamente (cross-origin), quebrando o
+   padrão same-origin. **Trocar para uma variável server-only, ex. `BACKEND_API_URL`**
+   (sem prefixo `NEXT_PUBLIC_`), usada só dentro de `next.config.js`.
+2. **Não definir `NEXT_PUBLIC_API_URL`** no ambiente de produção do Vercel — assim
+   `lib/api.ts` continua usando caminhos relativos.
+3. **Backend (`apps/api`)**: confirmar que `secure=True` nos cookies (`anac_token`,
+   `anac_role`) é ativado quando `ENVIRONMENT=production` (ver `_validate_settings()`
+   e onde os cookies são setados em `routes/auth.py`).
+4. Ajustar `cors_origins` (config.py) para incluir o domínio Vercel como defesa
+   extra, mesmo que o tráfego principal passe pelo rewrite.
+
+## Configuração no Railway (apps/api)
+
+- Root directory: `apps/api`. Build a partir do `apps/api/Dockerfile` já existente.
+- Plugin **PostgreSQL** do Railway → injeta `DATABASE_URL` (confirmar formato
+  `postgresql+psycopg2://` vs `postgresql://` aceito pelo SQLAlchemy/psycopg2).
+- **Volume persistente** montado em `apps/api/uploads/` e `apps/api/generated/`
+  (sem isso, planilhas e PDFs/Excel gerados somem a cada deploy/restart).
+- Variáveis de ambiente:
+  - `DATABASE_URL` (do plugin Postgres)
+  - `SECRET_KEY` (≥32 chars, forte)
+  - `AUTH_USERNAME`, `AUTH_PASSWORD`
+  - `ENVIRONMENT=production`
+  - `CORS_ORIGINS=["https://<seu-app>.vercel.app"]`
+  - `GEMINI_API_KEY` / `OPENAI_API_KEY`
+  - `SMTP_*` (se for usar e-mail)
+  - `WEB_CONCURRENCY=1` (rate limiter atual é in-memory por worker; com >1 worker
+    o limite efetivo multiplica — ver `apps/api/app/core/rate_limit.py`)
+
+## Configuração no Vercel (apps/web)
+
+- Root directory: `apps/web`.
+- Variável de ambiente: `BACKEND_API_URL=https://<seu-backend>.up.railway.app`
+- **Não definir** `NEXT_PUBLIC_API_URL`.
+- Verificar se `output: "standalone"` em `next.config.js` causa algum problema no
+  build da Vercel (geralmente é ignorado, mas validar com build de teste).
+
+## Ordem de implementação (próxima sessão)
+
+1. Ajustar `apps/web/next.config.js` (`BACKEND_API_URL` em vez de `NEXT_PUBLIC_API_URL`).
+2. Conferir/ajustar `cors_origins` e `secure` dos cookies para produção em `apps/api`.
+3. Rodar `npm run build` em `apps/web` localmente para validar que nada quebra.
+4. Criar `docs/deploy.md` com o passo a passo completo (Railway + Vercel + variáveis).
+5. **Pendente do usuário**: criar projetos no Railway e Vercel; após o Railway gerar
+   o domínio do backend, informar a URL para configurar `BACKEND_API_URL` no Vercel.
+
+Critérios de qualidade:
+- Seja específico e cite arquivos, funções, pastas ou evidências sempre que possível.
+- Não invente funcionalidades que não encontrou.
+- Quando houver incerteza, marque como “precisa confirmar”.
+- Priorize clareza, completude e utilidade prática para desenvolvimento.
+- Separe análise de recomendação.
