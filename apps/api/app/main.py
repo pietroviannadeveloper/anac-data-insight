@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
@@ -134,6 +135,7 @@ dev_origins = [
 origins = dev_origins if settings.environment == "development" else settings.cors_origins
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     MaxBodySizeMiddleware,
     max_bytes=_MAX_BODY_MB * 1024 * 1024,

@@ -43,6 +43,8 @@ import {
   History,
   Filter,
   CalendarDays,
+  FileDown,
+  FileSpreadsheet,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -103,6 +105,7 @@ interface ConsolidatedBI {
   planejado_por_mes: Record<string, number>;
   realizado_por_mes: Record<string, number>;
   agendado_por_mes: Record<string, number>;
+  por_tipo: Array<{ tipo: string; label: string; total: number; realizado: number; agendado: number; taxa: number }>;
   por_gerencia: Array<{ gerencia: string; total: number; realizado: number; agendado: number; remanejado: number; taxa: number }>;
   por_cidade: Array<{ cidade: string; total: number }>;
   por_servidor: Array<{ servidor: string; total: number; realizado: number; agendado: number; sem_agendamento: number; remanejado: number; taxa: number; cidades_mes_vigente: string[] }>;
@@ -248,8 +251,16 @@ export default function PTAMensalPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; tipo: string } | null>(null);
 
+  const [exportingReport, setExportingReport] = useState(false);
+  const [exportingXlsx, setExportingXlsx] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Período selecionado para o dashboard (independente dos filtros da tabela)
+  const [periodoMes, setPeriodoMes] = useState<number>(new Date().getMonth() + 1);
+  const [periodoAnoCompleto, setPeriodoAnoCompleto] = useState(false);
+
   // Guard: admin only for upload actions, but all authenticated users can view
-  const isAdmin = auth.isAdmin();
+  useEffect(() => { setIsAdmin(auth.isAdmin()); }, []);
 
   useEffect(() => {
     if (!auth.isAuthenticated()) router.replace("/login");
@@ -357,6 +368,263 @@ export default function PTAMensalPage() {
     setPage(1);
   }
 
+  async function handleExportXlsx() {
+    setExportingXlsx(true);
+    try {
+      const params = new URLSearchParams();
+      if (filterMes) params.set("mes", filterMes);
+      if (filterStatus) params.set("status", filterStatus);
+      if (filterGerencia) params.set("gerencia", filterGerencia);
+      if (filterCidade) params.set("cidade", filterCidade);
+      if (filterServidor) params.set("servidor", filterServidor);
+      if (filterTipo) params.set("tipo", filterTipo);
+      if (search) params.set("search", search);
+      if (filterDiaVigente) params.set("dia_vigente", "true");
+      else if (filterMesVigente) params.set("mes_vigente", "true");
+      const blob = await api.download(`/api/v1/pta-mensal/activities/export?${params}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `atividades-pta-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Planilha exportada com sucesso.");
+    } catch {
+      toast.error("Não foi possível exportar as atividades. Tente novamente.");
+    } finally {
+      setExportingXlsx(false);
+    }
+  }
+
+  function handleExportGraficoMensal() {
+    if (!bi) {
+      toast.error("Nada para exportar ainda. Envie uma planilha do PTA primeiro.");
+      return;
+    }
+    setExportingReport(true);
+    try {
+      // Usa o período selecionado no dashboard
+      const mesNome    = mesNomeSel;
+      const planejado  = planejadoSel;
+      const realizado  = realizadoSel;
+      const agendado   = agendadoSel;
+      const semAgend   = semAgendSel;
+      const taxaMes    = taxaSel;
+      const planejadoAno = bi.total_planejado ?? 0;
+      const realizadoAno = bi.total_realizado ?? 0;
+
+      const SITUACAO_LABEL: Record<string, string> = {
+        adiantado:        "Adiantado",
+        atrasado:         "Atrasado",
+        dentro_do_previsto: "No prazo",
+      };
+      const SITUACAO_BG: Record<string, string> = {
+        adiantado:        "#065f46",
+        atrasado:         "#7f1d1d",
+        dentro_do_previsto: "#1e3a5f",
+      };
+      const SITUACAO_COLOR: Record<string, string> = {
+        adiantado:        "#34d399",
+        atrasado:         "#f87171",
+        dentro_do_previsto: "#60a5fa",
+      };
+      const situacaoLabel = SITUACAO_LABEL[bi.situacao_cronograma] ?? "—";
+      const situacaoBg    = SITUACAO_BG[bi.situacao_cronograma]    ?? "#1e3a5f";
+      const situacaoCor   = SITUACAO_COLOR[bi.situacao_cronograma] ?? "#60a5fa";
+      const corTaxa       = taxaMes >= 70 ? "#34d399" : taxaMes >= 50 ? "#facc15" : "#f87171";
+
+      // ── Canvas ──────────────────────────────────────────────────────────────
+      const W = 800, H = 440;
+      const canvas = document.createElement("canvas");
+      canvas.width  = W * 2;
+      canvas.height = H * 2;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas não suportado.");
+      ctx.scale(2, 2);
+
+      const F = "Arial, Helvetica, sans-serif";
+
+      const desenhar = (logo: HTMLImageElement | null) => {
+        // Fundo com gradiente sutil
+        const bg = ctx.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, "#001529");
+        bg.addColorStop(1, "#00203f");
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
+
+        // Faixa superior colorida (4px)
+        ctx.fillStyle = situacaoCor;
+        ctx.fillRect(0, 0, W, 4);
+
+        // ── Cabeçalho ───────────────────────────────────────────────────────
+        let textX = 28;
+
+        if (logo) {
+          const logoH = 44;
+          const logoW = Math.round(logo.naturalWidth * (logoH / logo.naturalHeight));
+          ctx.drawImage(logo, 28, 12, logoW, logoH);
+          textX = 28 + logoW + 16;
+        }
+
+        ctx.fillStyle = "rgba(255,255,255,0.45)";
+        ctx.font = `12px ${F}`;
+        ctx.fillText("PTA 2026", textX, 28);
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `bold 22px ${F}`;
+        const tituloExport = periodoAnoCompleto ? "Acompanhamento — Ano completo 2026" : `Acompanhamento — ${mesNome} de 2026`;
+        ctx.fillText(tituloExport, textX, 54);
+
+        // Badge de situação no canto direito
+        ctx.fillStyle = situacaoBg;
+        ctx.fillRect(W - 148, 14, 120, 40);
+        ctx.fillStyle = situacaoCor;
+        ctx.font = `bold 16px ${F}`;
+        ctx.textAlign = "center";
+        ctx.fillText(situacaoLabel, W - 88, 40);
+        ctx.textAlign = "left";
+
+        // Linha divisória
+        ctx.strokeStyle = "rgba(255,255,255,0.1)";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(28, 72); ctx.lineTo(W - 28, 72); ctx.stroke();
+
+        // ── Taxa grande (esquerda) ─────────────────────────────────────────
+        const TAXA_X = 52, TAXA_Y = 200;
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.font = `14px ${F}`;
+        ctx.fillText("Taxa de execução do mês", TAXA_X, 96);
+
+        ctx.shadowColor = corTaxa;
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = corTaxa;
+        ctx.font = `bold 80px ${F}`;
+        ctx.fillText(`${taxaMes.toFixed(1)}%`, TAXA_X, TAXA_Y);
+        ctx.shadowBlur = 0;
+
+        // Barra de progresso
+        const PROG_Y = TAXA_Y + 20, PROG_W = 230, PROG_H = 10;
+        ctx.fillStyle = "rgba(255,255,255,0.1)";
+        ctx.fillRect(TAXA_X, PROG_Y, PROG_W, PROG_H);
+        ctx.fillStyle = corTaxa;
+        ctx.fillRect(TAXA_X, PROG_Y, Math.min(taxaMes / 100, 1) * PROG_W, PROG_H);
+
+        // ── 4 KPIs (direita) ──────────────────────────────────────────────
+        const KPI_X = 320, KPI_Y = 88;
+        const kpis: Array<{ label: string; valor: number; cor: string; sub?: string }> = [
+          { label: "Planejado no mês",  valor: planejado, cor: "#a5b4fc" },
+          { label: "Realizado",         valor: realizado, cor: "#34d399", sub: `${planejado > 0 ? ((realizado / planejado) * 100).toFixed(0) : 0}% do mês` },
+          { label: "Agendado",          valor: agendado,  cor: "#60a5fa" },
+          { label: "Sem agendamento",   valor: semAgend,  cor: "#f87171" },
+        ];
+        const KPI_W = (W - KPI_X - 28 - 12 * 3) / 4;
+        kpis.forEach((k, i) => {
+          const x = KPI_X + i * (KPI_W + 12);
+          ctx.fillStyle = "rgba(255,255,255,0.05)";
+          ctx.fillRect(x, KPI_Y, KPI_W, 90);
+          ctx.fillStyle = k.cor;
+          ctx.fillRect(x, KPI_Y, KPI_W, 3);
+          ctx.fillStyle = "rgba(255,255,255,0.5)";
+          ctx.font = `12px ${F}`;
+          ctx.fillText(k.label, x + 10, KPI_Y + 22);
+          ctx.fillStyle = k.cor;
+          ctx.font = `bold 30px ${F}`;
+          ctx.fillText(String(k.valor), x + 10, KPI_Y + 62);
+          if (k.sub) {
+            ctx.fillStyle = "rgba(255,255,255,0.35)";
+            ctx.font = `11px ${F}`;
+            ctx.fillText(k.sub, x + 10, KPI_Y + 80);
+          }
+        });
+
+        // ── Barra empilhada ────────────────────────────────────────────────
+        const STACK_Y = 236;
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        ctx.font = `13px ${F}`;
+        ctx.fillText("Distribuição das atividades do mês", KPI_X, STACK_Y - 10);
+
+        const STACK_W = W - KPI_X - 28;
+        const STACK_H = 24;
+        const total = Math.max(planejado, realizado + agendado + semAgend, 1);
+        ctx.fillStyle = "rgba(255,255,255,0.06)";
+        ctx.fillRect(KPI_X, STACK_Y, STACK_W, STACK_H);
+        let sx = KPI_X;
+        ([[ realizado, "#34d399"], [agendado, "#60a5fa"], [semAgend, "#f87171"]] as Array<[number, string]>).forEach(([v, cor]) => {
+          const w = (v / total) * STACK_W;
+          ctx.fillStyle = cor;
+          ctx.fillRect(sx, STACK_Y, w, STACK_H);
+          sx += w;
+        });
+
+        let legX = KPI_X;
+        ([["#34d399", "Realizado", realizado], ["#60a5fa", "Agendado", agendado], ["#f87171", "Sem agendamento", semAgend]] as Array<[string, string, number]>).forEach(([cor, lbl, v]) => {
+          ctx.fillStyle = cor;
+          ctx.fillRect(legX, STACK_Y + STACK_H + 10, 10, 10);
+          ctx.fillStyle = "rgba(255,255,255,0.5)";
+          ctx.font = `12px ${F}`;
+          ctx.fillText(`${lbl} (${v})`, legX + 16, STACK_Y + STACK_H + 20);
+          legX += ctx.measureText(`${lbl} (${v})`).width + 36;
+        });
+
+        // ── Acumulado no ano ───────────────────────────────────────────────
+        const ACC_Y = STACK_Y + STACK_H + 52;
+        ctx.fillStyle = "rgba(255,255,255,0.1)";
+        ctx.fillRect(KPI_X, ACC_Y, STACK_W, 1);
+
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        ctx.font = `13px ${F}`;
+        ctx.fillText(`Acumulado no ano até ${mesNome}:`, KPI_X, ACC_Y + 22);
+
+        const taxaAno = planejadoAno > 0 ? (realizadoAno / planejadoAno) * 100 : 0;
+        const corAno = taxaAno >= 70 ? "#34d399" : taxaAno >= 50 ? "#facc15" : "#f87171";
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `14px ${F}`;
+        ctx.fillText(`${realizadoAno} realizadas de ${planejadoAno} planejadas`, KPI_X, ACC_Y + 44);
+        ctx.fillStyle = corAno;
+        ctx.font = `bold 20px ${F}`;
+        ctx.textAlign = "right";
+        ctx.fillText(`${taxaAno.toFixed(1)}% executado no ano`, W - 28, ACC_Y + 44);
+        ctx.textAlign = "left";
+
+        // ── Rodapé ─────────────────────────────────────────────────────────
+        ctx.fillStyle = "rgba(255,255,255,0.2)";
+        ctx.font = `12px ${F}`;
+        ctx.fillText(`Gerado em ${new Date().toLocaleString("pt-BR")} — ANAC Data Insight`, 28, H - 14);
+
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            toast.error("Não foi possível gerar o relatório. Tente novamente.");
+            setExportingReport(false);
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          const slug = periodoAnoCompleto ? "ano-completo" : mesNome.toLowerCase();
+          a.download = `pta-${slug}-2026.png`;
+          a.style.display = "none";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          toast.success("Relatório exportado com sucesso.");
+          setExportingReport(false);
+        }, "image/png");
+      };
+
+      const logo = new Image();
+      logo.onload  = () => desenhar(logo);
+      logo.onerror = () => desenhar(null);
+      logo.src = "/anac-logo.png";
+    } catch {
+      toast.error("Não foi possível gerar o relatório. Tente novamente.");
+      setExportingReport(false);
+    }
+  }
+
   const bi = summary?.consolidado;
 
   // Build monthly chart data
@@ -379,6 +647,28 @@ export default function PTAMensalPage() {
 
   const mesAtual = new Date().getMonth() + 1;
 
+  // Métricas do período selecionado no dashboard
+  const mesSel = periodoAnoCompleto ? null : periodoMes;
+  const mesNomeSel = mesSel ? MESES[mesSel] : "Ano completo 2026";
+  const planejadoSel = mesSel !== null
+    ? (bi?.planejado_por_mes ?? {})[String(mesSel)] ?? 0
+    : bi?.total_planejado ?? 0;
+  const realizadoSel = mesSel !== null
+    ? (bi?.realizado_por_mes ?? {})[String(mesSel)] ?? 0
+    : bi?.total_realizado ?? 0;
+  const agendadoSel = mesSel !== null
+    ? (bi?.agendado_por_mes ?? {})[String(mesSel)] ?? 0
+    : bi?.total_agendado ?? 0;
+  const semAgendSel = Math.max(0, planejadoSel - realizadoSel - agendadoSel);
+  const taxaSel = planejadoSel > 0 ? Math.round((realizadoSel / planejadoSel) * 1000) / 10 : 0;
+
+  // Tendência: compara com o mês anterior (só quando um mês específico está selecionado)
+  const mesPrev = mesSel !== null && mesSel > 1 ? mesSel - 1 : null;
+  const planejadoPrev = mesPrev !== null ? (bi?.planejado_por_mes ?? {})[String(mesPrev)] ?? 0 : 0;
+  const realizadoPrev = mesPrev !== null ? (bi?.realizado_por_mes ?? {})[String(mesPrev)] ?? 0 : 0;
+  const taxaPrev = planejadoPrev > 0 ? Math.round((realizadoPrev / planejadoPrev) * 1000) / 10 : null;
+  const taxaDelta = taxaPrev !== null ? Math.round((taxaSel - taxaPrev) * 10) / 10 : null;
+
   return (
     <div className="flex flex-col min-h-screen bg-[#001E3C]">
       <AppHeader />
@@ -399,10 +689,50 @@ export default function PTAMensalPage() {
               Dashboard de execução mensal, indicadores e gestão de planilhas do PTA vigente.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-300">
-              Mês atual: <strong>{MESES[mesAtual]}</strong>
-            </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Seletor de período */}
+            <div className="flex items-center gap-1.5 bg-white/4 border border-white/10 rounded-lg px-2 py-1">
+              <CalendarDays className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="text-xs text-blue-200/50 font-medium">2026</span>
+              <span className="text-white/15">·</span>
+              <select
+                value={periodoAnoCompleto ? "ano" : String(periodoMes)}
+                onChange={(e) => {
+                  if (e.target.value === "ano") {
+                    setPeriodoAnoCompleto(true);
+                  } else {
+                    setPeriodoAnoCompleto(false);
+                    setPeriodoMes(Number(e.target.value));
+                  }
+                }}
+                className="bg-transparent text-xs text-white font-semibold focus:outline-none cursor-pointer pr-1"
+              >
+                <option value="ano" className="bg-[#001E3C]">Ano completo</option>
+                {Array.from({ length: 12 }, (_, i) => (
+                  <option key={i + 1} value={String(i + 1)} className="bg-[#001E3C]">
+                    {MESES[i + 1]}{i + 1 === mesAtual ? " (atual)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handleExportXlsx}
+              disabled={exportingXlsx || !activities?.total}
+              title="Exportar atividades filtradas como planilha Excel"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/25 text-emerald-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              {exportingXlsx ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+              {exportingXlsx ? "Exportando..." : "Exportar .xlsx"}
+            </button>
+            <button
+              onClick={handleExportGraficoMensal}
+              disabled={exportingReport || !bi}
+              title="Exportar gráfico do mês como imagem PNG"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-500/15 hover:bg-blue-500/25 border border-blue-400/25 text-blue-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              {exportingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+              {exportingReport ? "Gerando gráfico..." : "Exportar gráfico mensal"}
+            </button>
             <button
               onClick={() => { fetchSummary(); fetchActivities(); }}
               className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white/80 transition-colors"
@@ -532,36 +862,44 @@ export default function PTAMensalPage() {
               </div>
             </div>
 
-            {/* KPI cards — mês vigente */}
+            {/* KPI cards — período selecionado */}
             <div className="mb-8 bg-blue-500/5 border border-blue-400/15 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
                 <CalendarDays className="w-4 h-4 text-blue-400" />
                 <span className="text-sm font-semibold text-white">
-                  {MESES[mesAtual]} (mês vigente)
+                  {mesNomeSel}
+                  {mesSel === mesAtual && <span className="ml-2 text-xs text-blue-300/60 font-normal">(mês atual)</span>}
                 </span>
                 <button
-                  onClick={() => { setFilterDiaVigente(true); setFilterMesVigente(false); setPage(1); }}
+                  onClick={() => {
+                    if (periodoAnoCompleto) {
+                      setFilterMes(""); setFilterMesVigente(false); setFilterDiaVigente(false);
+                    } else {
+                      setFilterMes(String(periodoMes)); setFilterMesVigente(false); setFilterDiaVigente(false);
+                    }
+                    setPage(1);
+                  }}
                   className="ml-auto flex items-center gap-1.5 px-3 py-1 text-xs bg-blue-500/20 hover:bg-blue-500/30 border border-blue-400/30 text-blue-300 rounded-lg transition-colors font-medium"
                 >
-                  <Filter className="w-3 h-3" /> Ver atividades do mês
+                  <Filter className="w-3 h-3" /> Ver atividades do período
                 </button>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white/4 rounded-lg px-4 py-3">
-                  <p className="text-blue-200/40 text-xs mb-0.5">Atividades no mês</p>
-                  <p className="text-white font-bold tabular-nums">{(bi.total_mes_vigente ?? 0).toLocaleString("pt-BR")}</p>
+                  <p className="text-blue-200/40 text-xs mb-0.5">Planejado</p>
+                  <p className="text-white font-bold tabular-nums">{planejadoSel.toLocaleString("pt-BR")}</p>
                 </div>
                 <div className="bg-white/4 rounded-lg px-4 py-3">
                   <p className="text-blue-200/40 text-xs mb-0.5">Realizadas</p>
-                  <p className="text-emerald-400 font-bold tabular-nums">{bi.realizadas_mes_vigente ?? 0}</p>
+                  <p className="text-emerald-400 font-bold tabular-nums">{realizadoSel}</p>
                 </div>
                 <div className="bg-white/4 rounded-lg px-4 py-3">
                   <p className="text-blue-200/40 text-xs mb-0.5">Agendadas</p>
-                  <p className="text-blue-300 font-bold tabular-nums">{bi.agendadas_mes_vigente ?? 0}</p>
+                  <p className="text-blue-300 font-bold tabular-nums">{agendadoSel}</p>
                 </div>
                 <div className="bg-white/4 rounded-lg px-4 py-3">
                   <p className="text-blue-200/40 text-xs mb-0.5">Sem Agendamento</p>
-                  <p className="text-orange-400 font-bold tabular-nums">{bi.sem_agendamento_mes_vigente ?? 0}</p>
+                  <p className="text-orange-400 font-bold tabular-nums">{semAgendSel}</p>
                 </div>
               </div>
             </div>
@@ -569,19 +907,34 @@ export default function PTAMensalPage() {
             {/* Execution rate bar */}
             <div className="mb-8 bg-white/4 rounded-xl border border-white/8 p-5">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-white">Taxa de Execução Geral</span>
-                <span className={`text-2xl font-bold tabular-nums ${(bi.taxa_execucao ?? 0) >= 70 ? "text-emerald-400" : (bi.taxa_execucao ?? 0) >= 50 ? "text-yellow-400" : "text-red-400"}`}>
-                  {(bi.taxa_execucao ?? 0).toFixed(1)}%
+                <span className="text-sm font-medium text-white">
+                  Taxa de Execução — <span className="text-blue-300">{mesNomeSel}</span>
                 </span>
+                <div className="flex items-center gap-2">
+                  {taxaDelta !== null && (
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                      taxaDelta > 0
+                        ? "text-emerald-400 bg-emerald-500/10 border-emerald-400/20"
+                        : taxaDelta < 0
+                        ? "text-red-400 bg-red-500/10 border-red-400/20"
+                        : "text-white/40 bg-white/5 border-white/10"
+                    }`}>
+                      {taxaDelta > 0 ? "+" : ""}{taxaDelta.toFixed(1)}% vs {MESES[mesPrev!]}
+                    </span>
+                  )}
+                  <span className={`text-2xl font-bold tabular-nums ${taxaSel >= 70 ? "text-emerald-400" : taxaSel >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                    {taxaSel.toFixed(1)}%
+                  </span>
+                </div>
               </div>
               <div className="h-3 bg-white/10 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${bi.taxa_execucao >= 70 ? "bg-emerald-500" : bi.taxa_execucao >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
-                  style={{ width: `${Math.min(bi.taxa_execucao ?? 0, 100)}%` }}
+                  className={`h-full rounded-full transition-all ${taxaSel >= 70 ? "bg-emerald-500" : taxaSel >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
+                  style={{ width: `${Math.min(taxaSel, 100)}%` }}
                 />
               </div>
               <div className="flex gap-4 mt-3 text-xs text-white/40">
-                <span>Taxa de Agendamento: <strong className="text-white/60">{(bi.taxa_agendamento ?? 0).toFixed(1)}%</strong></span>
+                <span>Taxa de Agendamento: <strong className="text-white/60">{planejadoSel > 0 ? (((realizadoSel + agendadoSel) / planejadoSel) * 100).toFixed(1) : "0.0"}%</strong></span>
                 <span>Sem GIASO: <strong className="text-orange-400/80">{bi.sem_giaso ?? 0}</strong></span>
                 <span>Sem PCDP: <strong className="text-orange-400/80">{bi.sem_pcdp ?? 0}</strong></span>
                 <span>Sem Processo: <strong className="text-orange-400/80">{bi.sem_processo ?? 0}</strong></span>

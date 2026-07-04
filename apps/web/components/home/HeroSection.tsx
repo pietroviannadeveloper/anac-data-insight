@@ -12,6 +12,7 @@ import {
   Moon,
 } from "lucide-react";
 import { auth } from "@/lib/auth";
+import LiveKpiStrip from "@/components/home/LiveKpiStrip";
 
 function getSaudacao(): { texto: string; Icon: React.ElementType } {
   const h = new Date().getHours();
@@ -167,8 +168,11 @@ export default function HeroSection() {
           })}
         </div>
 
+        {/* KPIs reais ao vivo */}
+        <LiveKpiStrip />
+
         {/* Rodapé sutil */}
-        <p className="text-center text-white/20 text-xs mt-10 animate-question">
+        <p className="text-center text-white/20 text-xs mt-8 animate-question">
           ANAC Data Insight · PTA 2026
         </p>
       </div>

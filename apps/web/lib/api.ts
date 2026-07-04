@@ -7,6 +7,8 @@ const _base: RequestInit = { credentials: "include" };
 
 function handleUnauthorized(): never {
   auth.clearSession();
+  // Sinaliza para a página de login mostrar toast de aviso
+  try { sessionStorage.setItem("anac_session_expired", "1"); } catch {}
   window.location.href = "/login";
   throw new Error("Sessão expirada. Faça login novamente.");
 }
@@ -101,6 +103,20 @@ export const api = {
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
       throw new Error(typeof body.detail === "string" ? body.detail : "Credenciais inválidas.");
+    }
+    // Backend sets httpOnly anac_token + readable anac_role cookies automatically
+  },
+
+  loginWithGoogle: async (credential: string): Promise<void> => {
+    const r = await fetch(`${API_BASE}/api/v1/auth/google`, {
+      ..._base,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw new Error(typeof body.detail === "string" ? body.detail : "Não foi possível entrar com o Google.");
     }
     // Backend sets httpOnly anac_token + readable anac_role cookies automatically
   },

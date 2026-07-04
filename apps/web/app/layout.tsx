@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 import PageWrapper from "@/components/layout/PageWrapper";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -19,7 +20,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${inter.variable} font-sans min-h-screen bg-[#00112b]`}>
-        <PageWrapper>{children}</PageWrapper>
+        <ErrorBoundary>
+          <PageWrapper>{children}</PageWrapper>
+        </ErrorBoundary>
         <Toaster
           position="bottom-right"
           toastOptions={{
