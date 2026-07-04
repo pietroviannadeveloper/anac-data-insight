@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -300,20 +301,19 @@ def _previous_year_execution_rate(db: Session, tipo_ciclo: Optional[str]) -> Opt
 VALID_BRIEFING_ORIGENS = ("ciclo", "pta_mensal")
 
 
-@router.get("/dashboard/briefing", tags=["Dashboard"])
-async def get_executive_briefing(
-    analysis_id: Optional[str] = Query(None, description="ID da análise ou 'all'"),
-    date_from: Optional[str] = Query(None),
-    date_to: Optional[str] = Query(None),
-    gerencia: Optional[str] = Query(None),
-    cidade: Optional[str] = Query(None),
-    tipo_ciclo: Optional[str] = Query(None),
-    origem: Optional[str] = Query(None, description="'ciclo' ou 'pta_mensal' — omitido combina ambas"),
-    incluir_historico: bool = Query(True, description="Se a comparação com o PTA Histórico deve ser calculada"),
-    approval_status: Optional[str] = Query(None, description="'oficial' = aprovado; 'rascunho' = qualquer não-aprovado"),
-    _: str = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+def _compute_briefing(
+    db: Session,
+    *,
+    analysis_id: Optional[str],
+    date_from: Optional[str],
+    date_to: Optional[str],
+    gerencia: Optional[str],
+    cidade: Optional[str],
+    tipo_ciclo: Optional[str],
+    origem: Optional[str],
+    incluir_historico: bool,
+    approval_status: Optional[str],
+) -> dict:
     """Agrega KPIs, pendências críticas e comparação com o ano anterior (PTA Histórico)
     para um briefing executivo pronto para reunião. Combina dados de Ciclos (uploads
     via /upload) e do PTA Mensal vigente, ou pode ser restrito a uma única origem."""
@@ -409,4 +409,192 @@ async def get_executive_briefing(
         },
         "gerencias_atencao": gerencias_atencao,
         "cidades_atencao": cidades_atencao,
+        "pta_status": pta_status,
     }
+
+
+@router.get("/dashboard/briefing", tags=["Dashboard"])
+async def get_executive_briefing(
+    analysis_id: Optional[str] = Query(None, description="ID da análise ou 'all'"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    gerencia: Optional[str] = Query(None),
+    cidade: Optional[str] = Query(None),
+    tipo_ciclo: Optional[str] = Query(None),
+    origem: Optional[str] = Query(None, description="'ciclo' ou 'pta_mensal' — omitido combina ambas"),
+    incluir_historico: bool = Query(True, description="Se a comparação com o PTA Histórico deve ser calculada"),
+    approval_status: Optional[str] = Query(None, description="'oficial' = aprovado; 'rascunho' = qualquer não-aprovado"),
+    _: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _compute_briefing(
+        db, analysis_id=analysis_id, date_from=date_from, date_to=date_to, gerencia=gerencia,
+        cidade=cidade, tipo_ciclo=tipo_ciclo, origem=origem, incluir_historico=incluir_historico,
+        approval_status=approval_status,
+    )
+
+
+class BriefingEmailRequest(BaseModel):
+    recipients: list[str]
+    analysis_id: Optional[str] = None
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    gerencia: Optional[str] = None
+    cidade: Optional[str] = None
+    tipo_ciclo: Optional[str] = None
+    origem: Optional[str] = None
+    incluir_historico: bool = True
+    approval_status: Optional[str] = None
+
+
+def _generate_briefing_pptx(
+    db: Session,
+    analysis_id: Optional[str],
+    date_from: Optional[str],
+    date_to: Optional[str],
+    gerencia: Optional[str],
+    cidade: Optional[str],
+    tipo_ciclo: Optional[str],
+    origem: Optional[str],
+    incluir_historico: bool,
+    approval_status: Optional[str],
+) -> tuple[bytes, dict]:
+    from app.services.pptx_report import generate_pptx
+
+    briefing = _compute_briefing(
+        db, analysis_id=analysis_id, date_from=date_from, date_to=date_to,
+        gerencia=gerencia, cidade=cidade, tipo_ciclo=tipo_ciclo, origem=origem,
+        incluir_historico=incluir_historico, approval_status=approval_status,
+    )
+    monthly_chart = _last_month_pta_chart_data(db, gerencia, cidade)
+    kpis = briefing["kpis"]
+    indicators = {
+        "total_atividades": kpis["total_activities"],
+        "realizadas": kpis["realizadas"],
+        "agendadas": kpis["agendadas"],
+        "sem_agendamento": kpis["sem_agendamento"],
+        "taxa_execucao": kpis["average_execution_rate"] or 0,
+        "taxa_agendamento": round(kpis["agendadas"] / kpis["total_activities"] * 100, 1) if kpis["total_activities"] else 0,
+        "pendencias_criticas": kpis["pendencias_criticas"],
+    }
+    alerts = [
+        {"type": "critical", "category": item["gerencia"] or "Sem gerência", "message": item["atividade"] or "Pendência crítica", "count": 1}
+        for item in briefing["pendencias_criticas"]["items"][:10]
+    ]
+    pptx_bytes = generate_pptx(
+        filename="Briefing Executivo", created_at=datetime.now(timezone.utc), total_rows=kpis["total_activities"],
+        indicators=indicators, alerts=alerts, ai_summary=None, analysis_type="ciclos",
+        briefing_extra={
+            "pta_status": briefing["pta_status"],
+            "comparison": briefing["comparison"],
+            "gerencias_atencao": briefing["gerencias_atencao"],
+            "cidades_atencao": briefing["cidades_atencao"],
+            "monthly_chart": monthly_chart,
+        },
+    )
+    return pptx_bytes, indicators
+
+
+_MESES = {1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
+          7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"}
+
+
+def _last_month_pta_chart_data(db: Session, gerencia: Optional[str], cidade: Optional[str]) -> Optional[dict]:
+    """Planejado x Realizado x Agendado do PTA Mensal no mês fechado anterior ao atual —
+    mesmos números do gráfico da tela de Acompanhamento PTA."""
+    from app.services.pta_mensal_service import compute_bi_summary
+
+    q = db.query(PTAMensalActivity)
+    if gerencia:
+        q = q.filter(PTAMensalActivity.gerencia.ilike(f"%{gerencia}%"))
+    if cidade:
+        q = q.filter(PTAMensalActivity.cidade.ilike(f"%{cidade}%"))
+    activities = q.all()
+    if not activities:
+        return None
+
+    act_dicts = [{
+        "status": a.status, "mes_num": a.mes_num, "mes_original_num": getattr(a, "mes_original_num", a.mes_num),
+        "gerencia": a.gerencia, "cidade": a.cidade, "servidor": a.servidor, "pcdp": a.pcdp,
+        "pcdp_tipo": getattr(a, "pcdp_tipo", None), "processo": a.processo, "remanejado": getattr(a, "remanejado", 0) or 0,
+        "sem_giaso": a.sem_giaso, "sem_pcdp": a.sem_pcdp, "sem_pcdp_valida": getattr(a, "sem_pcdp_valida", a.sem_pcdp) or 0,
+        "sem_processo": a.sem_processo, "local_indefinido": a.local_indefinido, "atividade": a.atividade,
+        "tipo_ciclo": a.tipo_ciclo,
+    } for a in activities]
+    consolidado = compute_bi_summary(act_dicts)
+
+    now = datetime.now(timezone.utc)
+    mes_anterior = 12 if now.month == 1 else now.month - 1
+    key = str(mes_anterior)
+    planejado = consolidado.get("planejado_por_mes", {}).get(key, 0)
+    realizado = consolidado.get("realizado_por_mes", {}).get(key, 0)
+    agendado = consolidado.get("agendado_por_mes", {}).get(key, 0)
+    if not (planejado or realizado or agendado):
+        return None
+    return {"mes_label": _MESES[mes_anterior], "planejado": planejado, "realizado": realizado, "agendado": agendado}
+
+
+@router.get("/dashboard/briefing/pptx", tags=["Dashboard"])
+async def download_executive_briefing_pptx(
+    analysis_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    gerencia: Optional[str] = None,
+    cidade: Optional[str] = None,
+    tipo_ciclo: Optional[str] = None,
+    origem: Optional[str] = None,
+    incluir_historico: bool = True,
+    approval_status: Optional[str] = None,
+    _: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Gera o PPTX do briefing executivo para download — usado pelo fluxo
+    'baixar e enviar pelo Outlook' quando o envio automático por SMTP não está disponível."""
+    pptx_bytes, _indicators = _generate_briefing_pptx(
+        db, analysis_id, date_from, date_to, gerencia, cidade, tipo_ciclo, origem, incluir_historico, approval_status,
+    )
+    now_str = datetime.now(timezone.utc).strftime("%d-%m-%Y")
+    from fastapi.responses import Response
+    return Response(
+        content=pptx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": f'attachment; filename="briefing_executivo_{now_str}.pptx"'},
+    )
+
+
+@router.post("/dashboard/briefing/email", tags=["Dashboard"])
+async def email_executive_briefing(
+    body: BriefingEmailRequest,
+    _: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Gera o briefing executivo em PowerPoint e envia por e-mail aos destinatários —
+    o botão 'um clique' da gerência: mesmos filtros da tela, sem precisar baixar e reanexar."""
+    if not body.recipients:
+        raise HTTPException(status_code=400, detail="Informe ao menos um destinatário.")
+
+    from app.services.email_service import send_email
+
+    pptx_bytes, indicators = _generate_briefing_pptx(
+        db, body.analysis_id, body.date_from, body.date_to, body.gerencia, body.cidade,
+        body.tipo_ciclo, body.origem, body.incluir_historico, body.approval_status,
+    )
+    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+
+    import tempfile, pathlib
+    tmp = pathlib.Path(tempfile.mktemp(suffix=".pptx"))
+    tmp.write_bytes(pptx_bytes)
+    try:
+        await send_email(
+            to=body.recipients,
+            subject=f"[ANAC Data Insight] Briefing Executivo — {now_str}",
+            html=f"<p>Briefing executivo gerado em {now_str}.</p>"
+                 f"<p>Taxa de execução: <strong>{indicators['taxa_execucao']}%</strong></p>"
+                 f"<p>Pendências críticas: <strong>{indicators['pendencias_criticas']}</strong></p>",
+            attachment_path=str(tmp),
+            attachment_name=f"briefing_executivo_{now_str.replace('/', '-')}.pptx",
+        )
+    finally:
+        tmp.unlink(missing_ok=True)
+
+    return {"sent_to": body.recipients}

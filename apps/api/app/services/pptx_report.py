@@ -15,6 +15,8 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
+from pptx.chart.data import CategoryChartData
+from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 
 ANAC_BLUE = RGBColor(0x00, 0x3A, 0x70)
 DARK      = RGBColor(0x1e, 0x29, 0x3b)
@@ -115,6 +117,7 @@ def generate_pptx(
     alerts: list[dict] | None,
     ai_summary: dict[str, Any] | None,
     analysis_type: str = "ciclos",
+    briefing_extra: dict[str, Any] | None = None,
 ) -> bytes:
     prs = Presentation()
     prs.slide_width = Inches(10)
@@ -155,6 +158,51 @@ def generate_pptx(
             ]
             slide2 = _add_heading_slide(prs, "Resultado por Tipo de Ciclo")
             _add_table(slide2, rows, headers=("Tipo", "Realizadas / Total"))
+
+    # ── PTA Mensal e comparação histórica (briefing executivo) ───────────
+    extra = briefing_extra or {}
+    pta_status = extra.get("pta_status")
+    if pta_status:
+        label = {"realizado": "Realizadas", "agendado": "Agendadas", "sem-agendamento": "Sem agendamento"}
+        slide_pta = _add_heading_slide(prs, "PTA Mensal — Situação Atual")
+        _add_table(slide_pta, [(label.get(k, k), v) for k, v in pta_status.items()])
+
+    comparison = extra.get("comparison")
+    if comparison and comparison.get("average_execution_rate_previous") is not None:
+        delta = comparison.get("delta")
+        seta = "▲" if (delta or 0) >= 0 else "▼"
+        _add_bullet_slide(prs, "Comparação com Ano Anterior", [
+            f"Taxa de execução atual: {ind.get('taxa_execucao', 0)}%",
+            f"Taxa de execução no mesmo período do ano anterior: {comparison['average_execution_rate_previous']}%",
+            f"Variação: {seta} {abs(delta) if delta is not None else 0} p.p.",
+        ])
+
+    gerencias_atencao = extra.get("gerencias_atencao")
+    if gerencias_atencao:
+        _add_bullet_slide(prs, "Gerências em Atenção", [
+            f"{g['gerencia']} — {g['criticas']} pendência(s) crítica(s)" for g in gerencias_atencao
+        ])
+
+    cidades_atencao = extra.get("cidades_atencao")
+    if cidades_atencao:
+        _add_bullet_slide(prs, "Cidades em Atenção", [
+            f"{c['cidade']} — {c['criticas']} pendência(s) crítica(s)" for c in cidades_atencao
+        ])
+
+    monthly_chart = extra.get("monthly_chart")
+    if monthly_chart:
+        slide_chart = _add_heading_slide(prs, f"Gráfico Mensal — {monthly_chart['mes_label']}")
+        chart_data = CategoryChartData()
+        chart_data.categories = [monthly_chart["mes_label"]]
+        chart_data.add_series("Planejado", (monthly_chart["planejado"],))
+        chart_data.add_series("Realizado", (monthly_chart["realizado"],))
+        chart_data.add_series("Agendado", (monthly_chart["agendado"],))
+        gframe = slide_chart.shapes.add_chart(
+            XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(1), Inches(1.3), Inches(8), Inches(5), chart_data,
+        )
+        gframe.chart.has_legend = True
+        gframe.chart.legend.position = XL_LEGEND_POSITION.BOTTOM
+        gframe.chart.legend.include_in_layout = False
 
     # ── Pendências críticas / Alertas ────────────────────────────────────
     if alerts:

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppHeader from "@/components/layout/AppHeader";
 import AppFooter from "@/components/layout/AppFooter";
 import {
-  Presentation, Loader2, AlertCircle, TrendingUp, TrendingDown, Minus,
+  Presentation, Loader2, AlertCircle, TrendingUp, TrendingDown, Minus, Mail, Send,
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -81,6 +81,10 @@ export default function BriefingPage() {
   const [availableGerencias, setAvailableGerencias] = useState<string[]>([]);
   const [availableCidades, setAvailableCidades] = useState<string[]>([]);
 
+  const [emailInput, setEmailInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendMessage, setSendMessage] = useState<string | null>(null);
+
   useEffect(() => {
     const params = origem ? `?origem=${origem}` : "";
     api.get(`/api/v1/pendencias/filtros${params}`)
@@ -112,6 +116,69 @@ export default function BriefingPage() {
   }, [gerencia, cidade, dateFrom, dateTo, origem, incluirHistorico]);
 
   useEffect(() => { fetchBriefing(); }, [fetchBriefing]);
+
+  const handleSendEmail = useCallback(async () => {
+    const recipients = emailInput.split(",").map((e) => e.trim()).filter(Boolean);
+    if (recipients.length === 0) {
+      setSendMessage("Informe ao menos um e-mail.");
+      return;
+    }
+    setSending(true);
+    setSendMessage(null);
+    try {
+      await api.post("/api/v1/dashboard/briefing/email", {
+        recipients, gerencia, cidade, date_from: dateFrom, date_to: dateTo,
+        origem, incluir_historico: incluirHistorico,
+      });
+      setSendMessage("Briefing enviado com sucesso.");
+    } catch (e) {
+      setSendMessage(e instanceof Error ? e.message : "Erro ao enviar o briefing.");
+    } finally {
+      setSending(false);
+    }
+  }, [emailInput, gerencia, cidade, dateFrom, dateTo, origem, incluirHistorico]);
+
+  // ponytail: SMTP corporativo bloqueado (sem senha de app) — baixa o PPTX e abre
+  // o Outlook Web com destinatário/assunto/corpo prontos; o anexo é manual.
+  const handleSendViaOutlook = useCallback(async () => {
+    const recipients = emailInput.split(",").map((e) => e.trim()).filter(Boolean);
+    if (recipients.length === 0) {
+      setSendMessage("Informe ao menos um e-mail.");
+      return;
+    }
+    setSending(true);
+    setSendMessage(null);
+    try {
+      const params = new URLSearchParams();
+      if (gerencia) params.set("gerencia", gerencia);
+      if (cidade) params.set("cidade", cidade);
+      if (dateFrom) params.set("date_from", dateFrom);
+      if (dateTo) params.set("date_to", dateTo);
+      if (origem) params.set("origem", origem);
+      params.set("incluir_historico", String(incluirHistorico));
+      const blob = await api.download(`/api/v1/dashboard/briefing/pptx?${params}`);
+      const now = new Date().toLocaleDateString("pt-BR");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `briefing_executivo_${now.replace(/\//g, "-")}.pptx`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      const subject = `[ANAC Data Insight] Briefing Executivo — ${now}`;
+      const body = `Segue em anexo o briefing executivo gerado em ${now}, com Ciclos de Fiscalização e PTA Mensal, ` +
+        `comparação com o ano anterior e gerências/cidades em atenção.\n\n` +
+        `O arquivo foi baixado nesta aba — anexe-o manualmente antes de enviar.`;
+      const outlookUrl = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(recipients.join(";"))}` +
+        `&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.open(outlookUrl, "_blank");
+      setSendMessage("PPTX baixado e Outlook Web aberto — anexe o arquivo e envie por lá.");
+    } catch (e) {
+      setSendMessage(e instanceof Error ? e.message : "Erro ao preparar o envio pelo Outlook.");
+    } finally {
+      setSending(false);
+    }
+  }, [emailInput, gerencia, cidade, dateFrom, dateTo, origem, incluirHistorico]);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -184,6 +251,35 @@ export default function BriefingPage() {
             />
             Comparar com PTA Histórico
           </label>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          <Mail className="w-4 h-4 text-blue-300/60" />
+          <input
+            type="text"
+            placeholder="email@anac.gov.br, email2@anac.gov.br"
+            value={emailInput}
+            onChange={(e) => setEmailInput(e.target.value)}
+            className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-blue-200/80 focus:outline-none focus:border-blue-400/50 w-72"
+          />
+          <button
+            onClick={handleSendEmail}
+            disabled={sending}
+            className="flex items-center gap-2 bg-[#003A70] hover:bg-[#004a8c] disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Enviar briefing por e-mail
+          </button>
+          <button
+            onClick={handleSendViaOutlook}
+            disabled={sending}
+            className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            title="Baixa o PPTX e abre o Outlook Web com o e-mail pronto — use quando o envio automático não estiver configurado."
+          >
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+            Baixar e enviar pelo Outlook
+          </button>
+          {sendMessage && <span className="text-xs text-blue-200/60">{sendMessage}</span>}
         </div>
 
         {loading ? (
