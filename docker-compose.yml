@@ -8,7 +8,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://anac:${POSTGRES_PASSWORD:-anac}@postgres:5432/anac_db
+      - DATABASE_URL=postgresql+psycopg2://anac:${POSTGRES_PASSWORD:-anac}@postgres:5432/anac_data_insight
       - UPLOAD_DIR=/data/uploads
       - GENERATED_DIR=/data/generated
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY obrigatório em produção}
@@ -59,13 +59,13 @@ services:
     environment:
       POSTGRES_USER: anac
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-anac}
-      POSTGRES_DB: anac_db
+      POSTGRES_DB: anac_data_insight
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U anac -d anac_db"]
+      test: ["CMD-SHELL", "pg_isready -U anac -d anac_data_insight"]
       interval: 5s
       timeout: 5s
       retries: 5

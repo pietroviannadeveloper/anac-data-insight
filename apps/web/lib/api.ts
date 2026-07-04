@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Empty string → relative URL → proxied by Next.js rewrites → sem cross-origin
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 // All requests include credentials so the httpOnly anac_token cookie is sent automatically
 const _base: RequestInit = { credentials: "include" };

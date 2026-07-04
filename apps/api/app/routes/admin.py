@@ -75,7 +75,7 @@ async def list_users(
 @router.post("/admin/users", tags=["Admin"], status_code=201)
 async def create_user(
     body: CreateUserBody,
-    _: str = Depends(require_admin),
+    current_user: str = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     if not body.username.strip():
@@ -120,7 +120,7 @@ async def toggle_user_status(
 async def reset_user_password(
     user_id: str,
     body: ResetPasswordBody,
-    _: str = Depends(require_admin),
+    current_user: str = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     if len(body.password) < 6:
@@ -284,7 +284,7 @@ async def admin_list_analyses(
 @router.delete("/admin/analyses/bulk", tags=["Admin"])
 async def bulk_delete_analyses(
     ids: list[str] = Body(...),
-    _: str = Depends(require_admin),
+    current_user: str = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     if not ids:

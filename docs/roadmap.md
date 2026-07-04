@@ -1,6 +1,6 @@
 # Roadmap — ANAC Data Insight
 
-> Atualizado em 2026-06-08. Itens marcados com ✅ foram entregues.
+> Atualizado em 2026-06-09. Itens marcados com ✅ foram entregues.
 
 ---
 
@@ -51,12 +51,22 @@
 
 ---
 
-## 🔄 v0.4 — Em andamento / próximos
+## ✅ v0.4 — Qualidade, UX e testes — Concluído
 
-- [ ] Login institucional via Microsoft Entra ID (Azure AD) — substitui Google OAuth; necessário pois ANAC usa Outlook
+- [x] Filtros clicáveis por tipo de planilha no PTAMensal (chips + cards upload)
+- [x] KPIs do BI atualizam ao filtrar (fetchSummary por parâmetro, sem stale closure)
+- [x] Suporte a multi-filtro tipos[] no backend (ex.: PTA Completo = BASE + DESEMPENHO)
+- [x] Chat com IA flutuante por página (AIChat widget com createPortal, tema dark ANAC)
+- [x] Sugestões de perguntas contextuais por página (PTAMensal / Histórico PTA)
+- [x] Testes de componente React Testing Library — 40 testes (AIChat, ConfirmDialog, Skeleton, StatusBadge)
+- [x] Cobertura de testes backend ≥ 80% — 257 testes pytest passando
+- [x] Configuração Jest com ts-jest, jsdom, mocks de CSS/arquivo e alias @/
+
+---
+
+## 🔄 v0.5 — Em andamento / próximos
+
 - [ ] Migração de SQLite para PostgreSQL em produção
-- [ ] Testes de componente (React Testing Library)
-- [ ] Cobertura de testes backend (meta: >80%)
 - [ ] Deploy em servidor interno ANAC
 - [ ] Documentação de API (OpenAPI expandida)
 

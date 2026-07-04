@@ -1,22 +1,14 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
-# SQLite needs check_same_thread=False; PostgreSQL does not need that flag
-connect_args = {}
-is_sqlite = settings.database_url.startswith("sqlite")
-if is_sqlite:
-    connect_args = {"check_same_thread": False}
-
-_engine_kwargs: dict = {"connect_args": connect_args}
-if not is_sqlite:
-    # Pool de conexões para PostgreSQL em produção
-    _engine_kwargs["pool_size"] = getattr(settings, "db_pool_size", 10)
-    _engine_kwargs["max_overflow"] = getattr(settings, "db_max_overflow", 20)
-    _engine_kwargs["pool_pre_ping"] = True  # descarta conexões mortas automaticamente
-
-engine = create_engine(settings.database_url, **_engine_kwargs)
+engine = create_engine(
+    settings.database_url,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_pre_ping=True,
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -33,72 +25,44 @@ def get_db():
 
 
 def create_tables():
-    """Create all tables, run column migrations and seed the admin user."""
+    """Initialize schema and seed the admin user.
+
+    Strategy for PostgreSQL:
+    - create_all() creates tables from models (idempotent).
+    - If alembic_version is absent, stamp head so future 'alembic upgrade' works.
+    - If alembic_version exists, run upgrade head to apply any pending migrations.
+    """
+    # Import all models so Base.metadata knows every table
     from app.models import analysis  # noqa: F401
-    from app.models import user as user_models  # noqa: F401
-    from app.models import pta as pta_models  # noqa: F401
-    from app.models import pta_planning as pta_planning_models  # noqa: F401
-    from app.models import pta_mensal as pta_mensal_models  # noqa: F401
+    from app.models import user  # noqa: F401
+    from app.models import pta  # noqa: F401
+    from app.models import pta_planning  # noqa: F401
+    from app.models import pta_mensal  # noqa: F401
+    from app.models import scheduled  # noqa: F401
+
     Base.metadata.create_all(bind=engine)
-    _ensure_role_column()
-    _migrate_old_roles()
-    _migrate_pta_mensal_columns()
-    _migrate_analyses_soft_delete()
+    _sync_alembic()
     _seed_admin()
 
 
-def _migrate_analyses_soft_delete() -> None:
-    """Add deleted_at column to analyses table if it doesn't exist."""
-    from sqlalchemy import text
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE analyses ADD COLUMN deleted_at DATETIME"))
-            conn.commit()
-    except Exception:
-        pass  # coluna já existe
+def _sync_alembic() -> None:
+    """Stamp or upgrade Alembic so the version table stays in sync."""
+    from pathlib import Path
+    from alembic import command
+    from alembic.config import Config
 
+    ini_path = Path(__file__).resolve().parents[2] / "alembic.ini"
+    alembic_cfg = Config(str(ini_path))
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
 
-def _migrate_pta_mensal_columns() -> None:
-    """Add new columns to pta_mensal_activities if they don't exist yet."""
-    from sqlalchemy import text
-    new_cols = [
-        ("mes_original_num", "INTEGER"),
-        ("pcdp_tipo", "VARCHAR"),
-        ("remanejado", "INTEGER DEFAULT 0"),
-        ("sem_pcdp_valida", "INTEGER DEFAULT 0"),
-    ]
-    try:
-        with engine.connect() as conn:
-            for col, col_type in new_cols:
-                try:
-                    conn.execute(text(f"ALTER TABLE pta_mensal_activities ADD COLUMN {col} {col_type}"))
-                    conn.commit()
-                except Exception:
-                    pass  # coluna já existe
-    except Exception:
-        pass
-
-
-def _migrate_old_roles() -> None:
-    """Migrate legacy 'user' role to 'analyst' so existing users keep write access."""
-    from sqlalchemy import text
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("UPDATE users SET role = 'analyst' WHERE role = 'user'"))
-            conn.commit()
-    except Exception:
-        pass
-
-
-def _ensure_role_column() -> None:
-    """Add role column to users table if it doesn't exist (SQLite/Postgres migration)."""
-    from sqlalchemy import text
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR NOT NULL DEFAULT 'user'"))
-            conn.commit()
-    except Exception:
-        pass  # Column already exists
+    with engine.connect() as conn:
+        table_names = inspect(conn).get_table_names()
+        if "alembic_version" not in table_names:
+            # Fresh DB: tables created by create_all — mark all migrations as applied
+            command.stamp(alembic_cfg, "head")
+        else:
+            # Existing DB: apply any pending migrations
+            command.upgrade(alembic_cfg, "head")
 
 
 def _seed_admin() -> None:
@@ -109,7 +73,6 @@ def _seed_admin() -> None:
     - Old 'admin' user from previous seed: migrates to new username/password.
     - Admin already exists: ensures role is correct.
     """
-    from app.core.config import settings
     from app.core.security import get_password_hash
     from app.models.user import User
 
@@ -118,15 +81,15 @@ def _seed_admin() -> None:
         new_admin = db.query(User).filter(User.username == settings.auth_username).first()
         if new_admin:
             if new_admin.role != "admin":
-                new_admin.role = "admin"
+                new_admin.role = "admin"  # type: ignore[assignment]
                 db.commit()
             return
 
         old_admin = db.query(User).filter(User.username == "admin").first()
         if old_admin:
-            old_admin.username = settings.auth_username
-            old_admin.password_hash = get_password_hash(settings.auth_password)
-            old_admin.role = "admin"
+            old_admin.username = settings.auth_username  # type: ignore[assignment]
+            old_admin.password_hash = get_password_hash(settings.auth_password)  # type: ignore[assignment]
+            old_admin.role = "admin"  # type: ignore[assignment]
             db.commit()
             return
 
