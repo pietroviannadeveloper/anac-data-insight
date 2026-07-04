@@ -224,3 +224,105 @@ async def chat_with_data(
         context_used=scope,
         analysis_id=body.analysis_id,
     )
+
+
+# ── Page-context chat ──────────────────────────────────────────────────────────
+
+_PAGE_PROMPTS: dict[str, str] = {
+    "ptamensal": (
+        "Você é um assistente analítico especializado em acompanhamento do PTA (Plano de Trabalho Anual) mensal da ANAC.\n"
+        "Analise os indicadores abaixo e responda à pergunta do usuário de forma objetiva e em português brasileiro.\n"
+        "Use listas quando houver múltiplos pontos. Não invente dados além dos fornecidos.\n"
+        "Se algum indicador estiver ausente, diga que não há dados suficientes para esse ponto."
+    ),
+    "pta_historico": (
+        "Você é um assistente analítico especializado em análise histórica do PTA (Plano de Trabalho Anual) da ANAC.\n"
+        "Analise os dados históricos abaixo e responda à pergunta do usuário de forma objetiva e em português brasileiro.\n"
+        "Destaque tendências, comparações entre anos e pontos de atenção. Use listas quando houver múltiplos pontos.\n"
+        "Não invente dados além dos fornecidos."
+    ),
+}
+
+
+class PageChatRequest(BaseModel):
+    question: str
+    page_type: str
+    context: dict
+
+
+class PageChatResponse(BaseModel):
+    answer: str
+    provider: str
+
+
+async def _call_ai(prompt: str) -> tuple[str, str]:
+    """Call the configured AI provider and return (answer, provider_name)."""
+    from app.core.config import settings
+    import httpx
+
+    if settings.gemini_api_key:
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}"
+        )
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096},
+        }
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(url, json=payload)
+        resp.raise_for_status()
+        answer = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        return answer, "gemini"
+
+    if settings.openai_api_key:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                json={
+                    "model": settings.openai_model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.3,
+                },
+            )
+        resp.raise_for_status()
+        answer = resp.json()["choices"][0]["message"]["content"].strip()
+        return answer, "openai"
+
+    return (
+        "Nenhum provedor de IA está configurado. "
+        "Adicione GEMINI_API_KEY ou OPENAI_API_KEY no arquivo .env para habilitar o chat.",
+        "mock",
+    )
+
+
+@router.post("/chat/page", response_model=PageChatResponse, tags=["Chat"])
+async def chat_with_page_context(
+    body: PageChatRequest,
+    _: str = Depends(get_current_user),
+):
+    """
+    Recebe uma pergunta e um contexto de indicadores já computados pela página
+    (nunca dados brutos) e retorna uma resposta em linguagem natural.
+    page_type: 'ptamensal' | 'pta_historico'
+    """
+    if not body.question.strip():
+        raise HTTPException(status_code=400, detail="A pergunta não pode estar vazia.")
+
+    system_prompt = _PAGE_PROMPTS.get(body.page_type, _PAGE_PROMPTS["ptamensal"])
+    context_str = json.dumps(body.context, ensure_ascii=False, indent=2)
+
+    prompt = (
+        f"{system_prompt}\n\n"
+        f"INDICADORES DA PÁGINA:\n{context_str}\n\n"
+        f"PERGUNTA: {body.question.strip()}\n\n"
+        "RESPOSTA:"
+    )
+
+    try:
+        answer, provider = await _call_ai(prompt)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Erro ao consultar IA: {exc}")
+
+    return PageChatResponse(answer=answer, provider=provider)

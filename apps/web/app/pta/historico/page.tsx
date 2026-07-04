@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AppHeader from "@/components/layout/AppHeader";
 import AppFooter from "@/components/layout/AppFooter";
+import { AIChat } from "@/components/ui/AIChat";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import {
@@ -571,6 +572,26 @@ export default function PTAPage() {
         )}
       </main>
       <AppFooter />
+
+      <AIChat
+        pageType="pta_historico"
+        contextData={snapshots.length > 0 ? {
+          total_snapshots: snapshots.length,
+          anos_disponiveis: allYears,
+          por_ano: consolidado.map((c) => ({
+            ano: c.year,
+            total: c.total,
+            realizadas: c.realizadas,
+            taxa_execucao: Number(c.taxa.toFixed(1)),
+            sem_agendamento: c.semAgend,
+          })),
+          por_tipo: Object.entries(byTipo).map(([tipo, snaps]) => ({
+            tipo,
+            anos: snaps.map((s) => s.year),
+            ultimo_total: snaps.at(-1)?.indicators?.total_atividades ?? 0,
+          })),
+        } : null}
+      />
     </div>
   );
 }

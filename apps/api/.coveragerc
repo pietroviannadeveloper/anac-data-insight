@@ -1,0 +1,21 @@
+[run]
+source = app
+omit =
+    app/services/docx_report.py
+    app/services/pdf_report.py
+    app/services/email_service.py
+    app/services/geocoder.py
+    app/services/ai_summary.py
+    app/services/generic_analyzer.py
+    app/services/pdf_reader.py
+    app/services/alert_checker.py
+    app/services/scheduler.py
+    app/routes/upload.py
+    app/routes/analyses.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if TYPE_CHECKING:
+    @abstractmethod

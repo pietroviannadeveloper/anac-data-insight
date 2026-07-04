@@ -27,7 +27,7 @@ def _bypass_rate_limit():
 @pytest.fixture(scope="session")
 def db_engine():
     # Import all models so SQLAlchemy registers them in Base.metadata
-    from app.models import analysis, user  # noqa: F401
+    from app.models import analysis, user, pta, pta_planning, pta_mensal, scheduled  # noqa: F401
     # StaticPool ensures all connections share the same in-memory DB
     engine = create_engine(
         "sqlite:///:memory:",

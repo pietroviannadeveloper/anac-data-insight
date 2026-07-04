@@ -21,6 +21,7 @@ import AppHeader from "@/components/layout/AppHeader";
 import AppFooter from "@/components/layout/AppFooter";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SkeletonDashboard } from "@/components/ui/Skeleton";
+import { AIChat } from "@/components/ui/AIChat";
 import { useCountUp } from "@/hooks/useCountUp";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
@@ -64,6 +65,56 @@ const TIPO_COLORS: Record<string, string> = {
   PTA_FINAL: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
   NAO_INFORMADA: "bg-orange-500/20 text-orange-300 border-orange-500/30",
 };
+
+const FILTER_CHIPS: Array<{
+  value: string;
+  label: string;
+  chipClass: string;
+  activeClass: string;
+}> = [
+  {
+    value: "",
+    label: "Todos",
+    chipClass: "border-white/15 text-white/40 hover:text-white/70 hover:border-white/30",
+    activeClass: "bg-white/10 border-white/30 text-white/80",
+  },
+  {
+    value: "CICLO_BASE",
+    label: "Ciclo Base",
+    chipClass: "border-blue-500/20 text-blue-300/50 hover:text-blue-300 hover:border-blue-500/40",
+    activeClass: "bg-blue-500/20 border-blue-500/50 text-blue-300",
+  },
+  {
+    value: "CICLO_DESEMPENHO",
+    label: "Desempenho",
+    chipClass: "border-purple-500/20 text-purple-300/50 hover:text-purple-300 hover:border-purple-500/40",
+    activeClass: "bg-purple-500/20 border-purple-500/50 text-purple-300",
+  },
+  {
+    value: "CONTROLE_PTA",
+    label: "Controle PTA",
+    chipClass: "border-teal-500/20 text-teal-300/50 hover:text-teal-300 hover:border-teal-500/40",
+    activeClass: "bg-teal-500/20 border-teal-500/50 text-teal-300",
+  },
+  {
+    value: "PTA_FINAL",
+    label: "PTA Final",
+    chipClass: "border-emerald-500/20 text-emerald-300/50 hover:text-emerald-300 hover:border-emerald-500/40",
+    activeClass: "bg-emerald-500/20 border-emerald-500/50 text-emerald-300",
+  },
+  {
+    value: "NAO_INFORMADA",
+    label: "Não Informadas",
+    chipClass: "border-orange-500/20 text-orange-300/50 hover:text-orange-300 hover:border-orange-500/40",
+    activeClass: "bg-orange-500/20 border-orange-500/50 text-orange-300",
+  },
+  {
+    value: "PTA_COMPLETO",
+    label: "PTA Completo",
+    chipClass: "border-indigo-400/20 text-indigo-300/50 hover:text-indigo-200 hover:border-indigo-400/40",
+    activeClass: "bg-indigo-500/20 border-indigo-400/50 text-indigo-200",
+  },
+];
 
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   realizado: { label: "Realizado", color: "text-emerald-400", icon: <CheckCircle2 className="w-3 h-3" /> },
@@ -243,6 +294,7 @@ export default function PTAMensalPage() {
   const [filterCidade, setFilterCidade] = useState<string>("");
   const [filterServidor, setFilterServidor] = useState<string>("");
   const [filterTipo, setFilterTipo] = useState<string>("");
+  const [filterTipoBI, setFilterTipoBI] = useState<string>("");
   const [search, setSearch] = useState<string>("");
   const [filterDiaVigente, setFilterDiaVigente] = useState(false);
   const [filterMesVigente, setFilterMesVigente] = useState(false);
@@ -278,10 +330,18 @@ export default function PTAMensalPage() {
     }
   }, []);
 
-  const fetchSummary = useCallback(async () => {
+  const fetchSummary = useCallback(async (tipoFiltro = "") => {
     setLoadingSummary(true);
     try {
-      const data: Summary = await api.get("/api/v1/pta-mensal/summary");
+      const params = new URLSearchParams();
+      if (tipoFiltro === "PTA_COMPLETO") {
+        params.append("tipos", "CICLO_BASE");
+        params.append("tipos", "CICLO_DESEMPENHO");
+      } else if (tipoFiltro) {
+        params.set("tipo", tipoFiltro);
+      }
+      const query = params.toString() ? `?${params}` : "";
+      const data: Summary = await api.get(`/api/v1/pta-mensal/summary${query}`);
       setSummary(data);
     } catch {
       // summary might be empty — not fatal
@@ -301,7 +361,12 @@ export default function PTAMensalPage() {
       if (filterGerencia) params.set("gerencia", filterGerencia);
       if (filterCidade) params.set("cidade", filterCidade);
       if (filterServidor) params.set("servidor", filterServidor);
-      if (filterTipo) params.set("tipo", filterTipo);
+      if (filterTipo === "PTA_COMPLETO") {
+        params.append("tipos", "CICLO_BASE");
+        params.append("tipos", "CICLO_DESEMPENHO");
+      } else if (filterTipo) {
+        params.set("tipo", filterTipo);
+      }
       if (search) params.set("search", search);
       if (filterDiaVigente) params.set("dia_vigente", "true");
       else if (filterMesVigente) params.set("mes_vigente", "true");
@@ -314,7 +379,8 @@ export default function PTAMensalPage() {
     }
   }, [page, filterMes, filterStatus, filterGerencia, filterCidade, filterServidor, filterTipo, search, filterDiaVigente, filterMesVigente]);
 
-  useEffect(() => { fetchUploads(); fetchSummary(); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchUploads(); fetchSummary(""); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchSummary(filterTipoBI); }, [filterTipoBI]);  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { fetchActivities(); }, [fetchActivities]);
 
   async function handleUpload(e: React.FormEvent) {
@@ -334,7 +400,7 @@ export default function PTAMensalPage() {
       toast.success(msg);
       if (fileRef.current) fileRef.current.value = "";
       await fetchUploads();
-      await fetchSummary();
+      await fetchSummary(filterTipoBI);
       fetchActivities();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao enviar planilha.";
@@ -352,7 +418,7 @@ export default function PTAMensalPage() {
       await api.delete(`/api/v1/pta-mensal/uploads/${id}`);
       toast.success("Planilha excluída com sucesso.");
       await fetchUploads();
-      await fetchSummary();
+      await fetchSummary(filterTipoBI);
       fetchActivities();
     } catch {
       toast.error("Erro ao excluir upload. Tente novamente.");
@@ -734,7 +800,7 @@ export default function PTAMensalPage() {
               {exportingReport ? "Gerando gráfico..." : "Exportar gráfico mensal"}
             </button>
             <button
-              onClick={() => { fetchSummary(); fetchActivities(); }}
+              onClick={() => { fetchSummary(filterTipoBI); fetchActivities(); }}
               className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white/80 transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
@@ -757,37 +823,73 @@ export default function PTAMensalPage() {
               <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
-              {TIPOS.map((t) => {
-                const u = uploads.find((x) => x.tipo === t.value);
-                return (
-                  <div key={t.value} className={`rounded-lg border px-4 py-3 ${u ? "border-white/15 bg-white/3" : "border-white/6 bg-white/2 opacity-60"}`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <TipoBadge tipo={t.value} />
-                      {u && isAdmin && (
-                        <button
-                          onClick={() => setConfirmDelete({ id: u.id, tipo: t.label })}
-                          disabled={deletingId === u.id}
-                          className="p-1 rounded hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-colors disabled:opacity-40"
-                          title="Excluir planilha"
-                        >
-                          {deletingId === u.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                        </button>
+            <>
+              <p className="text-xs text-white/25 mb-2">Clique em um tipo para filtrar o dashboard abaixo</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
+                {TIPOS.map((t) => {
+                  const u = uploads.find((x) => x.tipo === t.value);
+                  const isActive = filterTipoBI === t.value;
+                  const chip = FILTER_CHIPS.find((c) => c.value === t.value);
+                  return (
+                    <div
+                      key={t.value}
+                      onClick={() => u && setFilterTipoBI(isActive ? "" : t.value)}
+                      className={`rounded-lg border px-4 py-3 transition-all ${
+                        u ? "cursor-pointer" : "opacity-50 cursor-default"
+                      } ${
+                        isActive && chip
+                          ? `${chip.activeClass} ring-1 ring-inset ring-current`
+                          : u
+                          ? "border-white/15 bg-white/3 hover:border-white/25 hover:bg-white/5"
+                          : "border-white/6 bg-white/2"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <TipoBadge tipo={t.value} />
+                        <div className="flex items-center gap-1">
+                          {isActive && <span className="text-[10px] text-white/40">✓ filtrado</span>}
+                          {u && isAdmin && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setConfirmDelete({ id: u.id, tipo: t.label }); }}
+                              disabled={deletingId === u.id}
+                              className="p-1 rounded hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-colors disabled:opacity-40"
+                              title="Excluir planilha"
+                            >
+                              {deletingId === u.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {u ? (
+                        <>
+                          <p className="text-white/70 text-xs truncate mt-1">{u.filename}</p>
+                          <p className="text-white/30 text-xs">{u.total_rows.toLocaleString("pt-BR")} atividades</p>
+                          <p className="text-white/20 text-xs">{new Date(u.created_at).toLocaleDateString("pt-BR")}</p>
+                        </>
+                      ) : (
+                        <p className="text-white/30 text-xs mt-1">Nenhuma planilha enviada</p>
                       )}
                     </div>
-                    {u ? (
-                      <>
-                        <p className="text-white/70 text-xs truncate mt-1">{u.filename}</p>
-                        <p className="text-white/30 text-xs">{u.total_rows.toLocaleString("pt-BR")} atividades</p>
-                        <p className="text-white/20 text-xs">{new Date(u.created_at).toLocaleDateString("pt-BR")}</p>
-                      </>
-                    ) : (
-                      <p className="text-white/30 text-xs mt-1">Nenhuma planilha enviada</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+              {/* PTA Completo chip — combina Ciclo Base + Desempenho */}
+              {uploads.some((u) => u.tipo === "CICLO_BASE") && uploads.some((u) => u.tipo === "CICLO_DESEMPENHO") && (
+                <button
+                  onClick={() => setFilterTipoBI(filterTipoBI === "PTA_COMPLETO" ? "" : "PTA_COMPLETO")}
+                  className={`mb-5 flex items-center gap-2 px-4 py-2 rounded-lg border text-xs font-medium transition-all ${
+                    filterTipoBI === "PTA_COMPLETO"
+                      ? "bg-indigo-500/20 border-indigo-400/50 text-indigo-200 ring-1 ring-indigo-400/30"
+                      : "bg-white/3 border-white/10 text-white/50 hover:text-white/80 hover:border-white/25"
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${filterTipoBI === "PTA_COMPLETO" ? "bg-indigo-400" : "bg-white/20"}`} />
+                  PTA Completo
+                  <span className="opacity-50 text-[10px]">(Ciclo Base + Desempenho)</span>
+                  {filterTipoBI === "PTA_COMPLETO" && <span className="opacity-60">✓</span>}
+                </button>
+              )}
+            </>
           )}
 
           {/* Upload form (admin only) */}
@@ -846,6 +948,26 @@ export default function PTAMensalPage() {
           </div>
         ) : (
           <>
+            {/* Indicador de filtro ativo no BI */}
+            {filterTipoBI && (
+              <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-white/4 border border-white/10 rounded-lg text-xs text-white/50">
+                <Filter className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Dashboard filtrado por:{" "}
+                  <strong className="text-white/80">
+                    {filterTipoBI === "PTA_COMPLETO"
+                      ? "PTA Completo (Ciclo Base + Desempenho)"
+                      : FILTER_CHIPS.find((c) => c.value === filterTipoBI)?.label ?? filterTipoBI}
+                  </strong>
+                </span>
+                <button
+                  onClick={() => setFilterTipoBI("")}
+                  className="ml-auto text-white/30 hover:text-white/70 transition-colors text-[11px]"
+                >
+                  ✕ Limpar filtro
+                </button>
+              </div>
+            )}
             {/* KPI cards — geral */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
               <KpiCard label="Total Planejado"    value={bi.total_planejado ?? 0}    color="text-white" />
@@ -1165,7 +1287,38 @@ export default function PTAMensalPage() {
                 Mostrando atividades de <strong>{MESES[mesAtual]}</strong> — feitas e previstas para o período vigente.
               </div>
             )}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {/* Chips de tipo */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {FILTER_CHIPS.map((chip) => {
+                const tiposCarregados = summary?.tipos_carregados ?? [];
+                const isDisabled =
+                  chip.value === "PTA_COMPLETO"
+                    ? !tiposCarregados.includes("CICLO_BASE") || !tiposCarregados.includes("CICLO_DESEMPENHO")
+                    : chip.value !== "" && !tiposCarregados.includes(chip.value);
+                const isActive = filterTipo === chip.value;
+                return (
+                  <button
+                    key={chip.value}
+                    disabled={isDisabled}
+                    onClick={() => { setFilterTipo(chip.value); setPage(1); }}
+                    aria-pressed={isActive}
+                    className={`px-3 py-1 text-xs font-medium rounded-full border transition-all ${
+                      isDisabled
+                        ? "opacity-30 cursor-not-allowed border-white/10 text-white/30"
+                        : isActive
+                        ? chip.activeClass
+                        : chip.chipClass
+                    }`}
+                  >
+                    {chip.label}
+                    {chip.value === "PTA_COMPLETO" && (
+                      <span className="ml-1 opacity-60 text-[10px]">CB+D</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
                 <input
@@ -1188,11 +1341,6 @@ export default function PTAMensalPage() {
                 <option value="realizado">Realizado</option>
                 <option value="agendado">Agendado</option>
                 <option value="sem-agendamento">Sem Agendamento</option>
-              </select>
-              <select value={filterTipo} onChange={(e) => { setFilterTipo(e.target.value); setPage(1); }}
-                className="bg-[#0a1929] [color-scheme:dark] border border-white/10 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400/40">
-                <option value="">Todos os tipos</option>
-                {TIPOS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
               <input
                 value={filterGerencia}
@@ -1292,6 +1440,15 @@ export default function PTAMensalPage() {
         </section>
       </main>
       <AppFooter />
+
+      <AIChat
+        pageType="ptamensal"
+        contextData={summary ? {
+          tipos_carregados: summary.tipos_carregados,
+          filtro_ativo: filterTipoBI || "todos",
+          ...summary.consolidado,
+        } : null}
+      />
 
       <ConfirmDialog
         open={!!confirmDelete}

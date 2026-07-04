@@ -8,11 +8,11 @@ from __future__ import annotations
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import asyncio
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -186,11 +186,14 @@ async def delete_upload(
 
 @router.get("/pta-mensal/summary")
 async def get_summary(
+    tipo: Optional[str] = None,
+    tipos: List[str] = Query(default=[]),
     db: Session = Depends(get_db),
     _: str = Depends(get_current_user),
 ):
     """
     Return aggregated BI summary across all uploaded PTA mensal spreadsheets.
+    Pass tipo= or tipos[]= to restrict the consolidado to a subset of planilhas.
     """
     uploads = db.query(PTAMensalUpload).all()
     if not uploads:
@@ -214,8 +217,13 @@ async def get_summary(
             **(u.indicators or {}),
         }
 
-    # consolidated across all activities
-    all_activities = db.query(PTAMensalActivity).all()
+    # consolidated across selected activities (all or filtered by tipo)
+    q = db.query(PTAMensalActivity)
+    if tipos:
+        q = q.filter(PTAMensalActivity.tipo_ciclo.in_(tipos))
+    elif tipo:
+        q = q.filter(PTAMensalActivity.tipo_ciclo == tipo)
+    all_activities = q.all()
     act_dicts = [
         {
             "status":           a.status,
@@ -253,6 +261,7 @@ async def get_summary(
 async def list_activities(
     upload_id: Optional[str] = None,
     tipo: Optional[str] = None,
+    tipos: List[str] = Query(default=[]),
     mes: Optional[int] = None,
     status: Optional[str] = None,
     gerencia: Optional[str] = None,
@@ -278,7 +287,9 @@ async def list_activities(
 
     if upload_id:
         q = q.filter(PTAMensalActivity.upload_id == upload_id)
-    if tipo:
+    if tipos:
+        q = q.filter(PTAMensalActivity.tipo_ciclo.in_(tipos))
+    elif tipo:
         q = q.filter(PTAMensalActivity.tipo_ciclo == tipo)
     if mes is not None:
         q = q.filter(PTAMensalActivity.mes_num == mes)
