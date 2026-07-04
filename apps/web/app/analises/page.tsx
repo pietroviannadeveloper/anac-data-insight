@@ -98,28 +98,63 @@ export default function AnalisesPage() {
     <div className="flex flex-col min-h-screen">
       <AppHeader />
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-10">
+        {/* Breadcrumb */}
+        <div className="mb-6">
+          <Link href="/" className="text-xs text-blue-300/50 hover:text-blue-300 transition-colors">
+            ← Início
+          </Link>
+        </div>
+
+        {/* Header */}
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <Link href="/" className="text-sm text-blue-300/60 hover:text-blue-300 transition-colors">← Início</Link>
-            <h1 className="text-2xl font-bold text-white mt-3">Análises</h1>
+            <h1 className="text-2xl font-bold text-white">Análises & Relatórios</h1>
             <p className="text-blue-200/50 text-sm mt-1">
-              {total > 0 ? `${total} planilha${total !== 1 ? "s" : ""} importada${total !== 1 ? "s" : ""}` : "Histórico de planilhas importadas"}
+              Ferramentas de análise, importação de planilhas e documentos
             </p>
           </div>
-          <div className="flex gap-2 mt-6">
-            <button
-              onClick={fetchAnalyses}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-blue-200/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/12 rounded-lg transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Atualizar
-            </button>
+          <button
+            onClick={fetchAnalyses}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-blue-200/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/12 rounded-lg transition-colors mt-1"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Atualizar
+          </button>
+        </div>
+
+        {/* Hub de ferramentas */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+          {[
+            { href: "/upload",    icon: Upload,      label: "Enviar planilha", color: "text-blue-400",   bg: "hover:border-blue-400/30 hover:bg-blue-500/8" },
+            { href: "/documentos",icon: FileText,    label: "Documentos PDF",  color: "text-purple-400", bg: "hover:border-purple-400/30 hover:bg-purple-500/8" },
+            { href: "/chat",      icon: PieChart,    label: "Chat IA",         color: "text-emerald-400",bg: "hover:border-emerald-400/30 hover:bg-emerald-500/8" },
+            { href: "/relatorios",icon: BarChart2,   label: "Relatórios",      color: "text-amber-400",  bg: "hover:border-amber-400/30 hover:bg-amber-500/8" },
+          ].map((tool) => (
             <Link
-              href="/upload"
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-[#003A70] hover:bg-[#0057A8] rounded-lg transition-colors"
+              key={tool.href}
+              href={tool.href}
+              className={`flex items-center gap-3 p-4 bg-white/4 border border-white/8 rounded-xl transition-all duration-200 group ${tool.bg}`}
             >
-              <Upload className="w-3.5 h-3.5" /> Nova análise
+              <tool.icon className={`w-4 h-4 shrink-0 ${tool.color}`} />
+              <span className="text-white/70 text-sm font-medium group-hover:text-white transition-colors">{tool.label}</span>
             </Link>
-          </div>
+          ))}
+        </div>
+
+        {/* Divisor */}
+        <div className="flex items-center gap-3 mb-5">
+          <h2 className="text-sm font-semibold text-white/60 whitespace-nowrap">Análises salvas</h2>
+          <div className="h-px flex-1 bg-white/8" />
+          {total > 0 && (
+            <span className="text-xs text-white/30 tabular-nums whitespace-nowrap">
+              {total} {total === 1 ? "análise" : "análises"}
+            </span>
+          )}
+          <Link
+            href="/upload"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-[#003A70] hover:bg-[#0057A8] rounded-lg transition-colors whitespace-nowrap"
+          >
+            <Upload className="w-3 h-3" /> Nova
+          </Link>
         </div>
 
         <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">

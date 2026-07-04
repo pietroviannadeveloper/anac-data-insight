@@ -1,5 +1,6 @@
-const TOKEN_COOKIE = "anac_token";
-const ROLE_COOKIE = "anac_role";
+const TOKEN_COOKIE    = "anac_token";
+const ROLE_COOKIE     = "anac_role";
+const USERNAME_COOKIE = "anac_username";
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
@@ -11,22 +12,32 @@ function deleteCookie(name: string): void {
   document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
 }
 
+/** "pietro.rocha" → "Pietro Rocha" */
+function formatDisplayName(raw: string): string {
+  return raw.replace(/\./g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export const auth = {
-  // Used only by api.ts for backward-compat Bearer header (cookie also sent via credentials:include)
   getToken: (): string | null => {
     if (typeof window === "undefined") return null;
-    // anac_token is httpOnly — cannot be read by JS. Return null intentionally.
-    // All API calls rely on credentials: "include" to send the cookie automatically.
-    return null;
+    return null; // anac_token é httpOnly
   },
 
   isAuthenticated: (): boolean => {
-    // Presence of the role cookie is the proxy indicator since anac_token is httpOnly
     return !!getCookie(ROLE_COOKIE);
   },
 
   getRole: (): string => {
     return getCookie(ROLE_COOKIE) || "viewer";
+  },
+
+  getUsername: (): string => {
+    return getCookie(USERNAME_COOKIE) || "";
+  },
+
+  getDisplayName: (): string => {
+    const raw = getCookie(USERNAME_COOKIE) || "";
+    return raw ? formatDisplayName(raw) : "";
   },
 
   isAdmin: (): boolean => {
@@ -38,12 +49,11 @@ export const auth = {
   },
 
   clearSession: (): void => {
-    // Only clears the readable role cookie; anac_token (httpOnly) is cleared by backend logout
     deleteCookie(ROLE_COOKIE);
-    deleteCookie(TOKEN_COOKIE); // in case non-httpOnly token still exists from old sessions
+    deleteCookie(TOKEN_COOKIE);
+    deleteCookie(USERNAME_COOKIE);
   },
 
-  // No-op kept for legacy calls
   setToken: (_token: string): void => {},
   setRole: (_role: string): void => {},
 };

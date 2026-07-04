@@ -81,6 +81,16 @@ export const api = {
     return r.json();
   },
 
+  uploadForm: async (path: string, form: FormData) => {
+    const r = await fetch(`${API_BASE}${path}`, {
+      ..._base,
+      method: "POST",
+      body: form,
+    });
+    await _checkResponse(r);
+    return r.json();
+  },
+
   login: async (username: string, password: string): Promise<void> => {
     const r = await fetch(`${API_BASE}/api/v1/auth/token`, {
       ..._base,

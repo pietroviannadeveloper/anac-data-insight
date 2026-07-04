@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
+import PageWrapper from "@/components/layout/PageWrapper";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -17,7 +19,20 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${inter.variable} font-sans min-h-screen bg-[#00112b]`}>
-        {children}
+        <PageWrapper>{children}</PageWrapper>
+        <Toaster
+          position="bottom-right"
+          toastOptions={{
+            style: {
+              background: "#0a1929",
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: "#e2e8f0",
+              fontSize: "13px",
+            },
+          }}
+          richColors
+          closeButton
+        />
       </body>
     </html>
   );

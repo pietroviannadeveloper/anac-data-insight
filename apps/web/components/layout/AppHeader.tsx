@@ -3,19 +3,17 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu, X, LogOut, ShieldCheck, Search, FileText, FileSpreadsheet, Loader2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { api } from "@/lib/api";
 
 const navLinks = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/upload", label: "Upload" },
-  { href: "/analises", label: "Análises" },
-  { href: "/ciclos", label: "Ciclos" },
-  { href: "/documentos", label: "Documentos PDF" },
-  { href: "/relatorios", label: "Relatórios" },
-  { href: "/chat", label: "Chat IA" },
+  { href: "/",               label: "Início" },
+  { href: "/ptamensal",      label: "Acompanhamento" },
+  { href: "/pta/historico",  label: "Histórico" },
+  { href: "/ciclos",         label: "Ciclos" },
+  { href: "/analises",       label: "Análises" },
 ];
 
 interface SearchResult {
@@ -154,12 +152,21 @@ function GlobalSearch() {
 export default function AppHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => { setIsAdmin(auth.isAdmin()); }, []);
 
-  function handleLogout() {
-    api.logout();
-  }
+  function handleLogout() { api.logout(); }
+
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
+
+  const navCls = (href: string) =>
+    `px-2.5 py-1.5 text-xs font-medium rounded whitespace-nowrap transition-colors duration-150 ${
+      isActive(href)
+        ? "bg-white/15 text-white font-semibold"
+        : "text-blue-100 hover:bg-[#0057A8] hover:text-white"
+    }`;
 
   return (
     <header className="sticky top-0 z-50 bg-[#003A70] border-b border-[#002550] shadow-md">
@@ -179,21 +186,13 @@ export default function AppHeader() {
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
             {navLinks.map((link) => (
-              <Link key={link.href} href={link.href}
-                className="px-3 py-2 text-sm font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors duration-150">
+              <Link key={link.href} href={link.href} className={navCls(link.href)}>
                 {link.label}
               </Link>
             ))}
             {isAdmin && (
-              <Link href="/admin"
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors duration-150">
-                <ShieldCheck className="w-4 h-4" /> Admin
-              </Link>
-            )}
-            {isAdmin && (
-              <Link href="/pta"
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-300 rounded hover:bg-[#0057A8] hover:text-white transition-colors duration-150">
-                PTA
+              <Link href="/admin" className={`flex items-center gap-1 ${navCls("/admin")}`}>
+                <ShieldCheck className="w-3.5 h-3.5" /> Admin
               </Link>
             )}
           </nav>
@@ -202,8 +201,8 @@ export default function AppHeader() {
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <GlobalSearch />
             <button onClick={handleLogout}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors duration-150">
-              <LogOut className="w-4 h-4" /> Sair
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors duration-150">
+              <LogOut className="w-3.5 h-3.5" /> Sair
             </button>
           </div>
 
@@ -229,12 +228,6 @@ export default function AppHeader() {
               <Link href="/admin" onClick={() => setMobileOpen(false)}
                 className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors">
                 <ShieldCheck className="w-4 h-4" /> Admin
-              </Link>
-            )}
-            {isAdmin && (
-              <Link href="/pta" onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-amber-300 rounded hover:bg-[#0057A8] hover:text-white transition-colors">
-                PTA
               </Link>
             )}
             <button onClick={handleLogout}

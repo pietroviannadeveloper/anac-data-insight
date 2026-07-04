@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,10 +18,11 @@ from app.services.ciclo_analyzer import analyze_ciclos_with_breakdown
 from app.services.generic_analyzer import analyze_generic
 from app.services.pdf_reader import extract_pdf, summarize_pdf_indicators
 from app.utils.file_utils import sanitize_filename
+from app.utils.file_validation import validate_file_bytes
 
 router = APIRouter()
 
-ALLOWED_EXTENSIONS      = {".csv", ".xlsx", ".xls"}
+ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
 
 
 async def _post_analysis_hooks(analysis, db: Session) -> None:
@@ -160,6 +162,10 @@ async def upload_file(
     if len(content) > settings.max_upload_size_mb * 1024 * 1024:
         raise HTTPException(status_code=413, detail=f"Arquivo excede {settings.max_upload_size_mb} MB.")
 
+    ok, reason = validate_file_bytes(file.filename or "", content)
+    if not ok:
+        raise HTTPException(status_code=400, detail=reason)
+
     safe_name = sanitize_filename(file.filename or "upload")
     upload_path = Path(settings.upload_dir) / safe_name
     upload_path.parent.mkdir(parents=True, exist_ok=True)
@@ -192,6 +198,10 @@ async def upload_and_analyze(
     if len(content) > settings.max_upload_size_mb * 1024 * 1024:
         raise HTTPException(status_code=413, detail=f"Arquivo excede {settings.max_upload_size_mb} MB.")
 
+    ok, reason = validate_file_bytes(file.filename or "", content)
+    if not ok:
+        raise HTTPException(status_code=400, detail=reason)
+
     safe_name = sanitize_filename(file.filename or "upload")
     upload_path = Path(settings.upload_dir) / safe_name
     upload_path.parent.mkdir(parents=True, exist_ok=True)
@@ -199,16 +209,19 @@ async def upload_and_analyze(
         f.write(content)
 
     try:
-        df = read_file(upload_path)
+        # Processamento pesado em thread pool para não bloquear o event loop
+        loop = asyncio.get_event_loop()
+        df = await loop.run_in_executor(None, read_file, upload_path)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Erro ao ler o arquivo: {e}")
 
-    detected_type = classify_spreadsheet(df)
-    if detected_type == "ciclos":
-        indicators: dict | None = analyze_ciclos_with_breakdown(df)
-    else:
-        indicators = analyze_generic(df)
-        detected_type = "generic"
+    def _analyze():
+        d_type = classify_spreadsheet(df)
+        if d_type == "ciclos":
+            return d_type, analyze_ciclos_with_breakdown(df)
+        return "generic", analyze_generic(df)
+
+    detected_type, indicators = await loop.run_in_executor(None, _analyze)
 
     now = datetime.now(timezone.utc)
     original_name = file.filename or safe_name

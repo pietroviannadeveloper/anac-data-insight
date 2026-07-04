@@ -33,10 +33,33 @@ def create_tables():
     from app.models import user as user_models  # noqa: F401
     from app.models import pta as pta_models  # noqa: F401
     from app.models import pta_planning as pta_planning_models  # noqa: F401
+    from app.models import pta_mensal as pta_mensal_models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     _ensure_role_column()
     _migrate_old_roles()
+    _migrate_pta_mensal_columns()
     _seed_admin()
+
+
+def _migrate_pta_mensal_columns() -> None:
+    """Add new columns to pta_mensal_activities if they don't exist yet."""
+    from sqlalchemy import text
+    new_cols = [
+        ("mes_original_num", "INTEGER"),
+        ("pcdp_tipo", "VARCHAR"),
+        ("remanejado", "INTEGER DEFAULT 0"),
+        ("sem_pcdp_valida", "INTEGER DEFAULT 0"),
+    ]
+    try:
+        with engine.connect() as conn:
+            for col, col_type in new_cols:
+                try:
+                    conn.execute(text(f"ALTER TABLE pta_mensal_activities ADD COLUMN {col} {col_type}"))
+                    conn.commit()
+                except Exception:
+                    pass  # coluna já existe
+    except Exception:
+        pass
 
 
 def _migrate_old_roles() -> None:

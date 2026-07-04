@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import rate_limit
+
 from app.core.dependencies import get_current_user
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db.database import get_db
@@ -11,12 +13,13 @@ from app.schemas.auth import LoginRequest, Token
 
 router = APIRouter()
 
-_COOKIE_NAME = "anac_token"
-_ROLE_COOKIE = "anac_role"
-_COOKIE_MAX_AGE = 8 * 3600  # 8 horas
+_COOKIE_NAME     = "anac_token"
+_ROLE_COOKIE     = "anac_role"
+_USER_COOKIE     = "anac_username"
+_COOKIE_MAX_AGE  = 8 * 3600  # 8 horas
 
 
-def _set_auth_cookies(response: Response, token: str, role: str, secure: bool = False) -> None:
+def _set_auth_cookies(response: Response, token: str, role: str, username: str, secure: bool = False) -> None:
     response.set_cookie(
         key=_COOKIE_NAME,
         value=token,
@@ -26,21 +29,22 @@ def _set_auth_cookies(response: Response, token: str, role: str, secure: bool = 
         samesite="lax",
         secure=secure,
     )
-    # Non-httpOnly cookie so frontend JS can read the role for UI rendering
-    response.set_cookie(
-        key=_ROLE_COOKIE,
-        value=role,
-        max_age=_COOKIE_MAX_AGE,
-        path="/",
-        httponly=False,
-        samesite="lax",
-        secure=secure,
-    )
+    # Non-httpOnly: frontend lê para renderização condicional
+    for key, value in ((_ROLE_COOKIE, role), (_USER_COOKIE, username)):
+        response.set_cookie(
+            key=key,
+            value=value,
+            max_age=_COOKIE_MAX_AGE,
+            path="/",
+            httponly=False,
+            samesite="lax",
+            secure=secure,
+        )
 
 
 def _clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie(_COOKIE_NAME, path="/", samesite="lax")
-    response.delete_cookie(_ROLE_COOKIE, path="/", samesite="lax")
+    for key in (_COOKIE_NAME, _ROLE_COOKIE, _USER_COOKIE):
+        response.delete_cookie(key, path="/", samesite="lax")
 
 
 def _log_access(db: Session, username: str, action: str, request: Request) -> None:
@@ -50,7 +54,13 @@ def _log_access(db: Session, username: str, action: str, request: Request) -> No
 
 
 @router.post("/auth/token", response_model=Token, tags=["Auth"])
-async def login(body: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+async def login(
+    body: LoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    _rl: None = Depends(rate_limit(max_requests=10, window_seconds=60)),
+):
     """Autentica com usuário e senha, retorna JWT e seta cookie httpOnly."""
     from app.core.config import settings
     from datetime import datetime, timezone
@@ -67,7 +77,7 @@ async def login(body: LoginRequest, request: Request, response: Response, db: Se
 
     token = create_access_token(body.username, role=user.role)
     secure = settings.environment == "production"
-    _set_auth_cookies(response, token, user.role, secure=secure)
+    _set_auth_cookies(response, token, user.role, user.username, secure=secure)
 
     return Token(access_token=token, role=user.role)
 
