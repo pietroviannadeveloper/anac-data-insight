@@ -31,6 +31,8 @@ def create_tables():
     """Create all tables, run column migrations and seed the admin user."""
     from app.models import analysis  # noqa: F401
     from app.models import user as user_models  # noqa: F401
+    from app.models import pta as pta_models  # noqa: F401
+    from app.models import pta_planning as pta_planning_models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     _ensure_role_column()
     _migrate_old_roles()

@@ -190,6 +190,12 @@ export default function AppHeader() {
                 <ShieldCheck className="w-4 h-4" /> Admin
               </Link>
             )}
+            {isAdmin && (
+              <Link href="/pta"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-300 rounded hover:bg-[#0057A8] hover:text-white transition-colors duration-150">
+                PTA
+              </Link>
+            )}
           </nav>
 
           {/* Right actions */}
@@ -223,6 +229,12 @@ export default function AppHeader() {
               <Link href="/admin" onClick={() => setMobileOpen(false)}
                 className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-100 rounded hover:bg-[#0057A8] hover:text-white transition-colors">
                 <ShieldCheck className="w-4 h-4" /> Admin
+              </Link>
+            )}
+            {isAdmin && (
+              <Link href="/pta" onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-amber-300 rounded hover:bg-[#0057A8] hover:text-white transition-colors">
+                PTA
               </Link>
             )}
             <button onClick={handleLogout}

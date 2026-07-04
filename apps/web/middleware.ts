@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/login"];
-const ADMIN_PATHS = ["/admin"];
+const ADMIN_PATHS = ["/admin", "/pta", "/planejamentopta"];
 
 function getJwtRole(token: string): string {
   try {
