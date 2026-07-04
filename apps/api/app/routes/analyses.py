@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.dependencies import get_current_user, require_admin, require_analyst_or_admin
 from app.db.database import get_db
-from app.models.analysis import Analysis, CicloActivity
+from app.models.analysis import Analysis, CicloActivity, PendenciaTracking, gen_uuid
 from app.schemas.upload import (
     AnalysisCreate, AnalysisResponse, AnalysisUpdate, PaginatedAnalysesResponse,
     PreviewResponse, AlertItem, AlertsResponse, TreatedDataResponse,
@@ -21,6 +21,7 @@ from app.services.file_reader import read_file, get_preview
 from app.services.classifier import classify_spreadsheet
 from app.services.ciclo_analyzer import analyze_ciclos_with_breakdown
 from app.services.classifier import classify_row_type
+from app.services.pendencia_rules import classify_severity, is_pendencia
 
 router = APIRouter()
 
@@ -112,8 +113,16 @@ async def create_analysis(
     db.commit()
     db.refresh(analysis)
 
-    _audit(db, current_user, "analysis_created", "analysis", str(analysis.id),
-           {"filename": analysis.original_filename, "type": detected_type})
+    import hashlib
+    from app.services.classifier import CLASSIFIER_VERSION
+    _audit(db, current_user, "analysis_created", "analysis", str(analysis.id), {
+        "filename": analysis.original_filename,
+        "type": detected_type,
+        "file_hash": hashlib.sha256(file_path.read_bytes()).hexdigest(),
+        "classifier_version": CLASSIFIER_VERSION,
+        "total_rows": analysis.total_rows,
+        "total_columns": analysis.total_columns,
+    })
     return analysis
 
 
@@ -160,6 +169,7 @@ def _save_ciclo_activities(db: Session, analysis_id: str, df):
         tipo_ciclo, criterio = classify_row_type(item_val)
 
         activity = CicloActivity(
+            id=gen_uuid(),
             analysis_id=analysis_id,
             item=item_val,
             atividade=g("atividade"),
@@ -183,6 +193,12 @@ def _save_ciclo_activities(db: Session, analysis_id: str, df):
             criterio_classificacao=criterio,
         )
         db.add(activity)
+        if is_pendencia(activity):
+            db.add(PendenciaTracking(
+                source_type="ciclo",
+                source_id=activity.id,
+                severity=classify_severity(activity),
+            ))
 
 
 def _audit(db: Session, username: str, action: str, entity_type: str, entity_id: str, meta: dict | None = None) -> None:
@@ -370,6 +386,8 @@ async def delete_analysis_permanent(
     db: Session = Depends(get_db),
 ):
     """Exclusão permanente — remove arquivo físico e registro do banco."""
+    from app.services.pendencia_query import delete_tracking_for_sources
+
     analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
     if not analysis:
         raise HTTPException(status_code=404, detail="Análise não encontrada.")
@@ -378,6 +396,8 @@ async def delete_analysis_permanent(
         stored.unlink()
     _audit(db, current_user, "analysis_deleted_permanent", "analysis", analysis_id,
            {"filename": analysis.original_filename})
+    activity_ids = [r[0] for r in db.query(CicloActivity.id).filter(CicloActivity.analysis_id == analysis_id).all()]
+    delete_tracking_for_sources(db, "ciclo", activity_ids)
     db.delete(analysis)
     db.commit()
 
@@ -443,6 +463,34 @@ async def get_analysis_alerts(
     alerts = _build_alerts(indicators, str(analysis.detected_type))
     total_critical = sum(1 for a in alerts if a.type == "error")
     return AlertsResponse(alerts=alerts, total_critical=total_critical)
+
+
+@router.get("/analyses/{analysis_id}/audit-trail", tags=["Analyses"])
+async def get_analysis_audit_trail(
+    analysis_id: str,
+    _: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Trilha de auditoria analítica: quem criou, exportou, editou esta análise — em ordem cronológica."""
+    from app.models.user import AuditLog
+
+    _get_analysis_or_404(analysis_id, db)
+    entries = (
+        db.query(AuditLog)
+        .filter(AuditLog.entity_type == "analysis", AuditLog.entity_id == analysis_id)
+        .order_by(AuditLog.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": e.id,
+            "username": e.username,
+            "action": e.action,
+            "extra_data": e.extra_data,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in entries
+    ]
 
 
 @router.get("/analyses/{analysis_id}/treated-data", response_model=TreatedDataResponse, tags=["Analyses"])
@@ -570,7 +618,7 @@ async def export_excel(
         df.write_excel(str(out_path))
 
         _audit(db, current_user, "excel_exported", "analysis", analysis_id,
-               {"filename": analysis.original_filename})
+               {"filename": analysis.original_filename, "version": analysis.version})
 
         return FileResponse(
             path=str(out_path),
@@ -637,7 +685,7 @@ async def export_pdf(
     safe_name = safe_name.rsplit(".", 1)[0] + "_relatorio.pdf"
 
     _audit(db, current_user, "pdf_exported", "analysis", analysis_id,
-           {"filename": analysis.original_filename})
+           {"filename": analysis.original_filename, "version": analysis.version})
 
     return FileResponse(
         path=str(out_path),
@@ -697,12 +745,71 @@ async def export_docx(
     safe_name = safe_name.rsplit(".", 1)[0] + "_relatorio.docx"
 
     _audit(db, current_user, "docx_exported", "analysis", analysis_id,
-           {"filename": analysis.original_filename})
+           {"filename": analysis.original_filename, "version": analysis.version})
 
     return FileResponse(
         path=str(out_path),
         filename=safe_name,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+@router.get("/analyses/{analysis_id}/export/pptx", tags=["Analyses"])
+async def export_pptx(
+    analysis_id: str,
+    current_user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Gera e devolve uma apresentação executiva em PowerPoint (.pptx)."""
+    from app.services.pptx_report import generate_pptx
+    from app.models.analysis import AIAnalysis
+
+    analysis = _get_analysis_or_404(analysis_id, db)
+    if analysis.status != "completed":
+        raise HTTPException(status_code=400, detail="A análise ainda não foi concluída.")
+
+    ai_record = db.query(AIAnalysis).filter(AIAnalysis.analysis_id == analysis_id).first()
+    ai_summary = None
+    if ai_record:
+        ai_summary = {
+            "resumo_executivo":   ai_record.resumo_executivo,
+            "principais_achados": ai_record.principais_achados or [],
+            "riscos_operacionais":ai_record.riscos_operacionais or [],
+            "recomendacoes":      ai_record.recomendacoes or [],
+        }
+
+    alerts_raw = _build_alerts(analysis.indicators or {}, str(analysis.detected_type))
+    alerts = [{"type": a.type, "category": a.category, "message": a.message, "count": a.count} for a in alerts_raw]
+
+    try:
+        pptx_bytes = generate_pptx(
+            filename=str(analysis.original_filename),
+            created_at=analysis.created_at,
+            total_rows=int(analysis.total_rows or 0),
+            indicators=analysis.indicators,
+            alerts=alerts,
+            ai_summary=ai_summary,
+            analysis_type=str(analysis.detected_type),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar PPTX: {e}")
+
+    out_dir = Path(settings.generated_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{analysis_id}_report.pptx"
+    out_path.write_bytes(pptx_bytes)
+
+    safe_name = "".join(c if c.isalnum() or c in "-_." else "_"
+                        for c in str(analysis.original_filename))
+    safe_name = safe_name.rsplit(".", 1)[0] + "_briefing.pptx"
+
+    _audit(db, current_user, "pptx_exported", "analysis", analysis_id,
+           {"filename": analysis.original_filename, "version": analysis.version})
+
+    return FileResponse(
+        path=str(out_path),
+        filename=safe_name,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
 
 

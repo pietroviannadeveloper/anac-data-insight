@@ -39,6 +39,7 @@ def create_tables():
     from app.models import pta_planning  # noqa: F401
     from app.models import pta_mensal  # noqa: F401
     from app.models import scheduled  # noqa: F401
+    from app.models import dictionary  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _sync_alembic()

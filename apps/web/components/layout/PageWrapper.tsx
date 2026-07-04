@@ -2,6 +2,11 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { AIChat } from "@/components/ui/AIChat";
+
+// Páginas que já possuem seu próprio assistente de IA com contexto específico,
+// ou onde o widget flutuante não faz sentido.
+const HIDE_GLOBAL_CHAT = ["/login", "/ptamensal", "/pta/historico", "/chat"];
 
 export default function PageWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -19,6 +24,9 @@ export default function PageWrapper({ children }: { children: React.ReactNode })
   return (
     <div ref={ref} className="animate-page-in">
       {children}
+      {!HIDE_GLOBAL_CHAT.includes(pathname) && (
+        <AIChat pageType="geral" contextData={null} />
+      )}
     </div>
   );
 }

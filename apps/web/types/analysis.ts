@@ -2,6 +2,7 @@ export type AnalysisStatus = "pending" | "processing" | "completed" | "error";
 export type SpreadsheetType = "ciclos" | "generic" | "pdf" | "unknown";
 export type ActivityStatus = "realizado" | "agendado" | "sem-agendamento";
 export type CriticalityLabel = "Regular" | "Atenção" | "Crítico" | "Muito crítico";
+export type ApprovalStatus = "rascunho" | "em_validacao" | "aprovado" | "rejeitado" | "arquivado";
 
 export interface Analysis {
   id: string;
@@ -12,6 +13,7 @@ export interface Analysis {
   total_rows: number;
   total_columns: number;
   indicators?: Record<string, unknown>;
+  approval_status?: ApprovalStatus;
   description?: string;
   tags?: string[];
   parent_analysis_id?: string;

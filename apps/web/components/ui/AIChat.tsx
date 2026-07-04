@@ -44,7 +44,7 @@ interface Message {
 }
 
 interface AIChatProps {
-  pageType: "ptamensal" | "pta_historico";
+  pageType: "ptamensal" | "pta_historico" | "geral";
   contextData: Record<string, unknown> | null;
   suggestedQuestions?: string[];
 }
@@ -63,6 +63,12 @@ const DEFAULT_SUGGESTIONS: Record<string, string[]> = {
     "Qual tipo de ciclo tem maior taxa de realização histórica?",
     "Quais tendências você observa nos dados históricos?",
     "Como o desempenho de 2024 se compara aos anos anteriores?",
+  ],
+  geral: [
+    "O que posso fazer nesta plataforma?",
+    "Como faço upload e análise de uma planilha?",
+    "Onde vejo o histórico do PTA?",
+    "Como funciona o planejamento do PTA?",
   ],
 };
 
@@ -186,7 +192,7 @@ function AIChatInner({ pageType, contextData, suggestedQuestions }: AIChatProps)
     setInput("");
   };
 
-  const pageLabel = pageType === "ptamensal" ? "PTA Mensal 2026" : "Histórico PTA";
+  const pageLabel = pageType === "ptamensal" ? "PTA Mensal 2026" : pageType === "pta_historico" ? "Histórico PTA" : "Assistente ANAC";
 
   return (
     <>

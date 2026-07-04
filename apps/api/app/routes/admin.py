@@ -19,7 +19,7 @@ from app.core.config import settings
 from app.core.dependencies import require_admin
 from app.core.security import get_password_hash
 from app.db.database import get_db
-from app.models.analysis import Analysis
+from app.models.analysis import Analysis, CicloActivity
 from app.models.user import AccessLog, AuditLog, User
 
 router = APIRouter()
@@ -287,11 +287,15 @@ async def bulk_delete_analyses(
     current_user: str = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    from app.services.pendencia_query import delete_tracking_for_sources
+
     if not ids:
         raise HTTPException(status_code=400, detail="Nenhum ID fornecido.")
 
     analyses = db.query(Analysis).filter(Analysis.id.in_(ids)).all()
     deleted_names = [a.original_filename for a in analyses]
+    activity_ids = [r[0] for r in db.query(CicloActivity.id).filter(CicloActivity.analysis_id.in_(ids)).all()]
+    delete_tracking_for_sources(db, "ciclo", activity_ids)
     for analysis in analyses:
         stored = Path(settings.upload_dir) / str(analysis.stored_filename)
         if stored.exists():
@@ -311,12 +315,17 @@ async def cleanup_old_errors(
     db: Session = Depends(get_db),
 ):
     """Delete analyses with status 'error' older than `days` days."""
+    from app.services.pendencia_query import delete_tracking_for_sources
+
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     old_errors = (
         db.query(Analysis)
         .filter(Analysis.status == "error", Analysis.created_at < cutoff)
         .all()
     )
+    old_ids = [a.id for a in old_errors]
+    activity_ids = [r[0] for r in db.query(CicloActivity.id).filter(CicloActivity.analysis_id.in_(old_ids)).all()]
+    delete_tracking_for_sources(db, "ciclo", activity_ids)
     for analysis in old_errors:
         stored = Path(settings.upload_dir) / str(analysis.stored_filename)
         if stored.exists():

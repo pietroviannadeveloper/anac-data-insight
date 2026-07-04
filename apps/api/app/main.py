@@ -9,8 +9,8 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.dependencies import get_current_user, require_admin
 from app.routes import (
-    admin, ai, analyses, alert_rules, chat, comments,
-    dashboard, health, scheduled, upload, pta, pta_mensal,
+    admin, ai, analyses, alert_rules, approvals, chat, comments,
+    dashboard, dictionary, health, pendencias, scheduled, upload, pta, pta_mensal,
 )
 from app.routes import auth as auth_router
 
@@ -166,6 +166,9 @@ app.include_router(ai.router,              prefix="/api/v1", dependencies=_prote
 app.include_router(dashboard.router,       prefix="/api/v1")
 app.include_router(admin.router,           prefix="/api/v1", dependencies=_admin_protected)
 app.include_router(comments.router,        prefix="/api/v1")
+app.include_router(dictionary.router,       prefix="/api/v1")
+app.include_router(pendencias.router,       prefix="/api/v1")
+app.include_router(approvals.router,        prefix="/api/v1")
 app.include_router(alert_rules.router,     prefix="/api/v1")
 app.include_router(chat.router,            prefix="/api/v1")
 app.include_router(scheduled.router,       prefix="/api/v1")

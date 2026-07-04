@@ -14,6 +14,8 @@ import {
   Settings,
   ShieldCheck,
   LogOut,
+  ListChecks,
+  Presentation,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { auth } from "@/lib/auth";
@@ -58,6 +60,14 @@ export default function AppSidebar() {
         <Link href="/ciclos" className={navClass("/ciclos")}>
           <RefreshCcw className="w-4 h-4 flex-shrink-0" />
           Ciclos
+        </Link>
+        <Link href="/pendencias" className={navClass("/pendencias")}>
+          <ListChecks className="w-4 h-4 flex-shrink-0" />
+          Pendências
+        </Link>
+        <Link href="/briefing" className={navClass("/briefing")}>
+          <Presentation className="w-4 h-4 flex-shrink-0" />
+          Briefing
         </Link>
         <Link href="/documentos" className={navClass("/documentos")}>
           <FileScan className="w-4 h-4 flex-shrink-0" />

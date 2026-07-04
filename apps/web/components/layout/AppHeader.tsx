@@ -14,6 +14,8 @@ const navLinks = [
   { href: "/pta/historico",  label: "Histórico" },
   { href: "/ciclos",         label: "Ciclos" },
   { href: "/analises",       label: "Análises" },
+  { href: "/pendencias",     label: "Pendências" },
+  { href: "/briefing",       label: "Briefing" },
 ];
 
 interface SearchResult {

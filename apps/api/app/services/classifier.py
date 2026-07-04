@@ -19,6 +19,10 @@ from typing import Literal
 SpreadsheetType = Literal["ciclos", "generic", "unknown"]
 TipoCiclo = Literal["CICLO_BASE", "CICLO_DESEMPENHO", "NAO_PROGRAMADA", "INDEFINIDO"]
 
+# Bumped whenever the column-signal patterns or row classification rules change,
+# so audit trails can record which ruleset produced a given Analysis.
+CLASSIFIER_VERSION = "1.0"
+
 # Regex patterns for row-level classification (case-insensitive)
 _RE_DESEMPENHO   = re.compile(r"^\s*D[\s.\-_/]*[A-Za-z0-9]+", re.IGNORECASE)
 _RE_NAO_PROGRAMADA = re.compile(r"^\s*N[\s.\-_/]*\d+", re.IGNORECASE)

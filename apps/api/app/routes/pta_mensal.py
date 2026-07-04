@@ -21,6 +21,8 @@ from app.core.dependencies import get_current_user, require_admin
 from app.utils.file_validation import validate_file_bytes
 from app.db.database import get_db
 from app.models.pta_mensal import PTAMensalActivity, PTAMensalUpload, TIPOS_MENSAL
+from app.services.pendencia_query import delete_tracking_for_sources
+from app.services.pendencia_rules import classify_severity, is_pendencia
 from app.services.pta_mensal_service import process_upload, compute_bi_summary
 
 router = APIRouter(tags=["PTA Mensal"])
@@ -106,6 +108,13 @@ async def upload_pta_mensal(
     old_uploads = (
         db.query(PTAMensalUpload).filter(PTAMensalUpload.tipo == tipo).all()
     )
+    old_upload_ids = [u.id for u in old_uploads]
+    if old_upload_ids:
+        old_activity_ids = [
+            r[0] for r in db.query(PTAMensalActivity.id)
+            .filter(PTAMensalActivity.upload_id.in_(old_upload_ids)).all()
+        ]
+        delete_tracking_for_sources(db, "pta_mensal", old_activity_ids)
     for old in old_uploads:
         # remove physical file if possible
         if old.stored_filename:
@@ -130,8 +139,12 @@ async def upload_pta_mensal(
     db.flush()
 
     # persist activity rows
+    from app.models.analysis import PendenciaTracking
+    from app.models.pta_mensal import _gen_uuid
+
     for act in result["activities"]:
-        db.add(PTAMensalActivity(
+        activity = PTAMensalActivity(
+            id=_gen_uuid(),
             upload_id=upload.id,
             item=act["item"],
             atividade=act["atividade"],
@@ -158,7 +171,14 @@ async def upload_pta_mensal(
             sem_processo=act["sem_processo"],
             local_indefinido=act["local_indefinido"],
             tipo_ciclo=tipo,
-        ))
+        )
+        db.add(activity)
+        if is_pendencia(activity):
+            db.add(PendenciaTracking(
+                source_type="pta_mensal",
+                source_id=activity.id,
+                severity=classify_severity(activity),
+            ))
 
     db.commit()
     db.refresh(upload)
@@ -180,6 +200,8 @@ async def delete_upload(
             (_UPLOAD_DIR / row.stored_filename).unlink(missing_ok=True)
         except Exception:
             pass
+    activity_ids = [r[0] for r in db.query(PTAMensalActivity.id).filter(PTAMensalActivity.upload_id == upload_id).all()]
+    delete_tracking_for_sources(db, "pta_mensal", activity_ids)
     db.delete(row)
     db.commit()
 

@@ -27,6 +27,10 @@ class Analysis(Base):
     total_rows = Column(Integer, default=0)
     total_columns = Column(Integer, default=0)
     indicators = Column(JSON, nullable=True)
+    quality_report = Column(JSON, nullable=True)
+    # rascunho | em_validacao | aprovado | rejeitado | arquivado — informativo,
+    # não bloqueia exportação de relatórios.
+    approval_status = Column(String, nullable=False, default="rascunho")
     description = Column(Text, nullable=True)
     tags = Column(JSON, nullable=True, default=list)
     parent_analysis_id = Column(String, nullable=True)   # links re-uploads of the same file
@@ -110,6 +114,54 @@ class AlertEvent(Base):
     triggered_value = Column(Integer, nullable=True)
     threshold = Column(Integer, nullable=False)
     operator = Column(String, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class PendenciaTracking(Base):
+    """Tracked work item for an activity flagged as a pendência (sem GIASO,
+    sem PCDP, sem processo, local indefinido, ou sem agendamento).
+
+    Polymorphic over `source_type`: "ciclo" -> CicloActivity.id,
+    "pta_mensal" -> PTAMensalActivity.id. No DB-level FK (different target
+    tables), so callers must explicitly clean up tracking rows when deleting
+    the underlying activity (see app/services/pendencia_query.py).
+    """
+    __tablename__ = "pendencia_tracking"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    source_type = Column(String, nullable=False, default="ciclo")  # ciclo | pta_mensal
+    source_id = Column(String, nullable=False, unique=True)
+    severity = Column(String, nullable=False)   # baixa | media | alta | critica
+    status = Column(String, nullable=False, default="novo")  # novo|em_analise|em_tratamento|resolvido|ignorado
+    assigned_to = Column(String, nullable=True)
+    resolution_note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow)
+
+
+class PendenciaHistorico(Base):
+    """Status change history for a PendenciaTracking item."""
+    __tablename__ = "pendencia_historico"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    pendencia_id = Column(String, ForeignKey("pendencia_tracking.id"), nullable=False)
+    username = Column(String, nullable=False)
+    old_status = Column(String, nullable=True)
+    new_status = Column(String, nullable=False)
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class AnalysisApproval(Base):
+    """Approval workflow transition history for an Analysis."""
+    __tablename__ = "analysis_approvals"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    analysis_id = Column(String, ForeignKey("analyses.id"), nullable=False)
+    from_status = Column(String, nullable=True)
+    to_status = Column(String, nullable=False)
+    username = Column(String, nullable=False)
+    comment = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utcnow)
 
 

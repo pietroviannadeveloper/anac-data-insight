@@ -58,8 +58,6 @@ const COLOR: Record<string, { ring: string; bg: string; text: string }> = {
   orange: { ring: "border-orange-500/50", bg: "bg-orange-500/10", text: "text-orange-300" },
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function taxaColor(v?: number | null) {
@@ -416,11 +414,7 @@ export default function PlanejamentoPTAPage() {
     if (files.desempenho)    form.append("desempenho",    files.desempenho);
     if (files.nao_informadas) form.append("nao_informadas", files.nao_informadas);
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/pta/planejar`, {
-        method: "POST", credentials: "include", body: form,
-      });
-      if (!resp.ok) { const b = await resp.json().catch(() => ({})); throw new Error(b.detail ?? `Erro ${resp.status}`); }
-      await resp.json();
+      await api.uploadForm("/api/v1/pta/planejar", form);
       setFiles({});
       await fetchPlannings();
     } catch (e) {

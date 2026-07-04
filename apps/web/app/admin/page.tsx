@@ -8,14 +8,14 @@ import {
   Users, ShieldCheck, Loader2, AlertCircle, Plus, X, CheckCircle,
   XCircle, KeyRound, Trash2, RefreshCw, Eye, EyeOff, ChevronLeft,
   ChevronRight, LogIn, LogOut, FileText, FileSpreadsheet, User,
-  ClipboardList, Download,
+  ClipboardList, Download, BookOpen, Pencil, Check,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "usuarios" | "acessos" | "arquivos" | "auditoria";
+type Tab = "usuarios" | "acessos" | "arquivos" | "auditoria" | "dicionario";
 
 interface AdminUser {
   id: string;
@@ -1167,6 +1167,316 @@ const AuditoriaTab = () => {
   );
 };
 
+// ─── Tab: Dicionário de dados ─────────────────────────────────────────────────
+
+interface DictionaryEntry {
+  id: string;
+  category: string;
+  canonical_value: string;
+  aliases: string[];
+  active: boolean;
+  created_by: string | null;
+  created_at: string | null;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  gerencia: "Gerência",
+  cidade: "Cidade",
+  servidor: "Servidor",
+  status: "Status",
+  categoria_atividade: "Categoria de atividade",
+};
+
+const DicionarioTab = () => {
+  const [entries, setEntries] = useState<DictionaryEntry[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filterCategory, setFilterCategory] = useState("");
+
+  const [newCategory, setNewCategory] = useState("gerencia");
+  const [newValue, setNewValue] = useState("");
+  const [newAliases, setNewAliases] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [editAliases, setEditAliases] = useState("");
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const fetchEntries = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = filterCategory ? `?category=${filterCategory}` : "";
+      const data = await api.get(`/api/v1/dictionary${params}`);
+      setEntries(data.items);
+      setCategories(data.categories);
+    } catch {
+      setError("Não foi possível carregar o dicionário de dados.");
+    } finally {
+      setLoading(false);
+    }
+  }, [filterCategory]);
+
+  useEffect(() => { fetchEntries(); }, [fetchEntries]);
+
+  const parseAliases = (raw: string): string[] =>
+    raw.split(",").map((a) => a.trim()).filter(Boolean);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateError(null);
+    if (!newValue.trim()) { setCreateError("O valor canônico é obrigatório."); return; }
+    setCreating(true);
+    try {
+      await api.post("/api/v1/dictionary", {
+        category: newCategory,
+        canonical_value: newValue.trim(),
+        aliases: parseAliases(newAliases),
+      });
+      setNewValue("");
+      setNewAliases("");
+      fetchEntries();
+    } catch {
+      setCreateError("Erro ao criar entrada.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (entry: DictionaryEntry) => {
+    setEditingId(entry.id);
+    setEditValue(entry.canonical_value);
+    setEditAliases(entry.aliases.join(", "));
+  };
+
+  const saveEdit = async (id: string) => {
+    try {
+      await api.patch(`/api/v1/dictionary/${id}`, {
+        canonical_value: editValue.trim(),
+        aliases: parseAliases(editAliases),
+      });
+      setEditingId(null);
+      fetchEntries();
+    } catch {
+      alert("Erro ao salvar alterações.");
+    }
+  };
+
+  const handleDelete = async (entry: DictionaryEntry) => {
+    if (!confirm(`Remover "${entry.canonical_value}" do dicionário?`)) return;
+    setDeleting(entry.id);
+    try {
+      await api.delete(`/api/v1/dictionary/${entry.id}`);
+      fetchEntries();
+    } catch {
+      alert("Erro ao remover entrada.");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3 bg-white/5 border border-white/10 rounded-xl p-4">
+        <div>
+          <label className="block text-xs font-medium text-blue-200/60 mb-1.5">Categoria</label>
+          <select
+            value={newCategory}
+            onChange={(e) => setNewCategory(e.target.value)}
+            className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-400/60"
+          >
+            {(categories.length ? categories : Object.keys(CATEGORY_LABELS)).map((c) => (
+              <option key={c} value={c} className="bg-[#001233]">{CATEGORY_LABELS[c] ?? c}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex-1 min-w-[180px]">
+          <label className="block text-xs font-medium text-blue-200/60 mb-1.5">Valor canônico</label>
+          <input
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            placeholder="ex: Gerência de Planejamento"
+            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400/60"
+          />
+        </div>
+        <div className="flex-1 min-w-[180px]">
+          <label className="block text-xs font-medium text-blue-200/60 mb-1.5">Aliases (separados por vírgula)</label>
+          <input
+            value={newAliases}
+            onChange={(e) => setNewAliases(e.target.value)}
+            placeholder="ex: GPA, G. Planejamento"
+            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400/60"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={creating}
+          className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-[#003A70] hover:bg-[#0057A8] rounded-lg transition-colors disabled:opacity-50"
+        >
+          {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          Adicionar
+        </button>
+        {createError && (
+          <p className="w-full text-xs text-red-400">{createError}</p>
+        )}
+      </form>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+          className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-blue-200/80 focus:outline-none focus:border-blue-400/50"
+        >
+          <option value="">Todas as categorias</option>
+          {Object.keys(CATEGORY_LABELS).map((c) => (
+            <option key={c} value={c} className="bg-[#001233]">{CATEGORY_LABELS[c]}</option>
+          ))}
+        </select>
+        <div className="flex-1" />
+        <button
+          onClick={fetchEntries}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm text-blue-200/60 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors"
+          aria-label="Atualizar"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+        </button>
+        <span className="text-xs text-blue-200/30">{entries.length} entrada{entries.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 gap-2 text-blue-200/50">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">Carregando dicionário...</span>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-2 text-red-400">
+            <AlertCircle className="w-7 h-7" />
+            <p className="text-sm">{error}</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-white/5 border-b border-white/10">
+              <tr>
+                {["Categoria", "Valor canônico", "Aliases", "Criado por", ""].map((h) => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-medium text-blue-200/50 uppercase tracking-wide">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {entries.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-12 text-center text-blue-200/40 text-sm">
+                    Nenhuma entrada cadastrada.
+                  </td>
+                </tr>
+              ) : (
+                entries.map((entry) => (
+                  <tr key={entry.id} className="hover:bg-white/5 transition-colors">
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-blue-300 bg-blue-400/10 border border-blue-400/20">
+                        {CATEGORY_LABELS[entry.category] ?? entry.category}
+                      </span>
+                    </td>
+                    {editingId === entry.id ? (
+                      <>
+                        <td className="px-4 py-2">
+                          <input
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-blue-400/60"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            value={editAliases}
+                            onChange={(e) => setEditAliases(e.target.value)}
+                            placeholder="separados por vírgula"
+                            className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400/60"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-blue-200/40 text-xs">{entry.created_by ?? "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => saveEdit(entry.id)}
+                              className="p-1.5 rounded-lg text-emerald-300 hover:bg-emerald-400/10 transition-colors"
+                              title="Salvar"
+                              aria-label="Salvar"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="p-1.5 rounded-lg text-blue-200/40 hover:text-white hover:bg-white/10 transition-colors"
+                              title="Cancelar"
+                              aria-label="Cancelar"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-3 text-white/90 font-medium">{entry.canonical_value}</td>
+                        <td className="px-4 py-3">
+                          {entry.aliases.length > 0 ? (
+                            <div className="flex gap-1 flex-wrap">
+                              {entry.aliases.map((a) => (
+                                <span key={a} className="text-[10px] px-1.5 py-0.5 rounded bg-white/8 text-blue-200/60 border border-white/10">
+                                  {a}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-white/20 italic text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-blue-200/40 text-xs">{entry.created_by ?? "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => startEdit(entry)}
+                              className="p-1.5 rounded-lg text-blue-200/40 hover:text-blue-300 hover:bg-blue-400/10 transition-colors"
+                              title="Editar"
+                              aria-label="Editar"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(entry)}
+                              disabled={deleting === entry.id}
+                              className="p-1.5 rounded-lg text-blue-200/40 hover:text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-40"
+                              title="Remover"
+                              aria-label="Remover"
+                            >
+                              {deleting === entry.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -1242,12 +1552,24 @@ export default function AdminPage() {
             <ClipboardList className="w-4 h-4" />
             Auditoria
           </button>
+          <button
+            onClick={() => setActiveTab("dicionario")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+              activeTab === "dicionario"
+                ? "bg-[#003A70] text-white"
+                : "text-blue-200/60 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            Dicionário de dados
+          </button>
         </div>
 
         {activeTab === "usuarios" && <UsuariosTab />}
         {activeTab === "acessos" && <AcessosTab />}
         {activeTab === "arquivos" && <ArquivosTab />}
         {activeTab === "auditoria" && <AuditoriaTab />}
+        {activeTab === "dicionario" && <DicionarioTab />}
       </main>
       <AppFooter />
     </div>

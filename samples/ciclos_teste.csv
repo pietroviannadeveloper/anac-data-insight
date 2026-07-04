@@ -1,0 +1,7 @@
+Item;Atividade;Gerencia;Setor;Regulado;Cidade;Mes;Realizado;Agendado;GIASO;PCDP;Processo;Prioridade
+B001;Inspeção de pista;GPA;Aeroportos;Aeroporto Internacional;Brasília;Janeiro;2026-01-15;;G-001;P-001;PR-001;Alta
+B002;Auditoria operacional;GPA;Aeroportos;Aeroporto Internacional;Brasília;Fevereiro;;2026-02-20;G-002;P-002;PR-002;Média
+B003;Vistoria de segurança;GPA;Aeroportos;;;Março;;;;;Alta
+B004;Fiscalização de solo;GCO;Operações;Companhia Aérea X;Recife;Abril;;;G-004;;PR-004;Média
+D001;Inspeção de desempenho;GCO;Operações;Companhia Aérea X;Recife;Maio;2026-05-10;;G-005;P-005;PR-005;Baixa
+N001;Vistoria extra;GCO;Operações;Companhia Aérea Y;Salvador;Junho;;;;;;Crítica

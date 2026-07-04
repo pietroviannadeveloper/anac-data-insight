@@ -25,6 +25,8 @@ class AnalysisResponse(BaseModel):
     total_rows: int
     total_columns: int
     indicators: Optional[dict] = None
+    quality_report: Optional[dict] = None
+    approval_status: Optional[str] = None
     description: Optional[str] = None
     tags: Optional[list[str]] = None
     parent_analysis_id: Optional[str] = None

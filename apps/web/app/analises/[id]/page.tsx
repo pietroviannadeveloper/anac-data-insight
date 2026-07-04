@@ -11,12 +11,34 @@ import {
   Loader2, AlertCircle, BarChart2, Table2, Bell, Sparkles,
   Download, CheckCircle, Clock, TrendingUp, AlertTriangle, List, FileText, PieChart,
   Tag, X, Plus, Pencil, Check, User, MessageSquare, Send, Trash2, GitBranch,
-  Bot, Map, FileDown,
+  Bot, Map, FileDown, ClipboardList,
 } from "lucide-react";
 import ActivityTable from "@/components/analysis/ActivityTable";
 import MapTab from "@/components/analysis/MapTab";
+import ApprovalBadge from "@/components/ui/ApprovalBadge";
+import { auth } from "@/lib/auth";
+import { ApprovalStatus } from "@/types/analysis";
 
-type Tab = "resumo" | "atividades" | "preview" | "alertas" | "ia" | "pdf-viewer" | "comentarios" | "chat" | "mapa";
+type Tab = "resumo" | "atividades" | "preview" | "alertas" | "ia" | "pdf-viewer" | "comentarios" | "chat" | "mapa" | "auditoria";
+
+interface AuditTrailEntry {
+  id: string;
+  username: string;
+  action: string;
+  extra_data: string | null;
+  created_at: string | null;
+}
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  analysis_created: "Análise criada",
+  excel_exported: "Exportação Excel",
+  pdf_exported: "Exportação PDF",
+  docx_exported: "Exportação DOCX",
+  pptx_exported: "Exportação PPTX",
+  analysis_soft_deleted: "Movida para lixeira",
+  analysis_restored: "Restaurada",
+  analysis_deleted_permanent: "Excluída permanentemente",
+};
 
 function MetricTile({ label, value, sub, status = "neutral" }: {
   label: string; value: string | number; sub?: string;
@@ -69,6 +91,9 @@ export default function AnaliseDetailPage() {
   // Version history
   const [versions, setVersions] = useState<{id:string;version:number;created_at:string;created_by?:string}[]>([]);
 
+  // Audit trail
+  const [auditTrail, setAuditTrail] = useState<AuditTrailEntry[]>([]);
+
   // Description inline edit
   const [editingDesc, setEditingDesc] = useState(false);
   const [descValue, setDescValue] = useState("");
@@ -82,6 +107,42 @@ export default function AnaliseDetailPage() {
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [pdfBlobLoading, setPdfBlobLoading] = useState(false);
   const [pdfBlobError, setPdfBlobError] = useState<string | null>(null);
+
+  // Approval workflow
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAnalystOrAdmin, setIsAnalystOrAdmin] = useState(false);
+  const [approvalLoading, setApprovalLoading] = useState(false);
+
+  useEffect(() => {
+    setIsAdmin(auth.isAdmin());
+    setIsAnalystOrAdmin(auth.isAnalystOrAdmin());
+  }, []);
+
+  const runApprovalAction = async (action: "submit" | "approve" | "reject" | "archive", body?: unknown) => {
+    if (!analysis) return;
+    setApprovalLoading(true);
+    try {
+      const updated = await api.post(`/api/v1/analyses/${analysis.id}/${action}`, body ?? {});
+      setAnalysis({ ...analysis, approval_status: updated.approval_status as ApprovalStatus });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao atualizar status de aprovação.";
+      alert(msg);
+    } finally {
+      setApprovalLoading(false);
+    }
+  };
+
+  const handleSubmitApproval = () => runApprovalAction("submit");
+  const handleApprove = () => runApprovalAction("approve");
+  const handleArchive = () => {
+    if (!confirm("Arquivar esta análise?")) return;
+    runApprovalAction("archive");
+  };
+  const handleReject = () => {
+    const comment = window.prompt("Motivo da rejeição:");
+    if (!comment || !comment.trim()) return;
+    runApprovalAction("reject", { comment: comment.trim() });
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -98,6 +159,7 @@ export default function AnaliseDetailPage() {
         setTags(a.tags ?? []);
         // Load comments
         api.get(`/api/v1/analyses/${id}/comments`).then(setComments).catch(() => {});
+        api.get(`/api/v1/analyses/${id}/audit-trail`).then(setAuditTrail).catch(() => {});
         // Load version siblings (same filename)
         if (a.original_filename) {
           api.get(`/api/v1/analyses?per_page=50`).then(r => {
@@ -229,6 +291,16 @@ export default function AnaliseDetailPage() {
     } catch { /* silent */ }
   };
 
+  const handleExportPptx = async () => {
+    try {
+      const blob = await api.download(`/api/v1/analyses/${id}/export/pptx`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `analise_${id}.pptx`; a.click();
+      URL.revokeObjectURL(url);
+    } catch { /* silent */ }
+  };
+
   const submitComment = async () => {
     if (!id || !commentInput.trim()) return;
     setCommentLoading(true);
@@ -276,6 +348,7 @@ export default function AnaliseDetailPage() {
     { key: "chat", label: "Chat", icon: Bot },
     ...(isCiclos ? [{ key: "mapa" as Tab, label: "Mapa", icon: Map }] : []),
     { key: "comentarios", label: `Comentários${comments.length > 0 ? ` (${comments.length})` : ""}`, icon: MessageSquare },
+    { key: "auditoria", label: "Auditoria", icon: ClipboardList },
   ];
 
   if (loading) return (
@@ -308,7 +381,10 @@ export default function AnaliseDetailPage() {
         <div className="mb-6 flex items-start justify-between">
           <div className="flex-1 min-w-0 mr-4">
             <Link href="/analises" className="text-sm text-blue-300/60 hover:text-blue-300 transition-colors">← Análises</Link>
-            <h1 className="text-xl font-bold text-white mt-2 truncate max-w-2xl">{analysis.original_filename}</h1>
+            <div className="flex items-center gap-2 mt-2">
+              <h1 className="text-xl font-bold text-white truncate max-w-2xl">{analysis.original_filename}</h1>
+              {analysis.approval_status && <ApprovalBadge status={analysis.approval_status} />}
+            </div>
             <p className="text-sm text-blue-200/50 mt-0.5">
               {analysis.detected_type === "ciclos"  ? "Ciclos de Fiscalização" :
                analysis.detected_type === "pdf"     ? "Documento PDF" :
@@ -385,6 +461,46 @@ export default function AnaliseDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 mt-6">
+            {/* Workflow de aprovação — informativo, não bloqueia exportação */}
+            {isAnalystOrAdmin && (analysis.approval_status === "rascunho" || analysis.approval_status === "rejeitado") && (
+              <button
+                onClick={handleSubmitApproval}
+                disabled={approvalLoading}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-yellow-300 bg-yellow-400/10 border border-yellow-400/25 rounded-lg hover:bg-yellow-400/20 transition-colors disabled:opacity-50"
+              >
+                {approvalLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                Submeter para validação
+              </button>
+            )}
+            {isAdmin && analysis.approval_status === "em_validacao" && (
+              <>
+                <button
+                  onClick={handleApprove}
+                  disabled={approvalLoading}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-emerald-300 bg-emerald-400/10 border border-emerald-400/25 rounded-lg hover:bg-emerald-400/20 transition-colors disabled:opacity-50"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" /> Aprovar
+                </button>
+                <button
+                  onClick={handleReject}
+                  disabled={approvalLoading}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-300 bg-red-400/10 border border-red-400/25 rounded-lg hover:bg-red-400/20 transition-colors disabled:opacity-50"
+                >
+                  <X className="w-3.5 h-3.5" /> Rejeitar
+                </button>
+              </>
+            )}
+            {isAdmin && analysis.approval_status !== "arquivado" && (
+              <button
+                onClick={handleArchive}
+                disabled={approvalLoading}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white/40 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-50"
+                title="Arquivar análise"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             {/* Botão Comparar — para ciclos com versões anteriores */}
             {isCiclos && versions.length > 0 && (
               <Link
@@ -433,6 +549,15 @@ export default function AnaliseDetailPage() {
               title="Baixar relatório editável em Word"
             >
               <FileDown className="w-3.5 h-3.5" /> Word
+            </button>
+
+            {/* Exportar PPTX */}
+            <button
+              onClick={handleExportPptx}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-orange-300 bg-orange-400/10 border border-orange-400/25 rounded-lg hover:bg-orange-400/20 transition-colors"
+              title="Baixar briefing executivo em PowerPoint"
+            >
+              <FileDown className="w-3.5 h-3.5" /> PPTX
             </button>
           </div>
         </div>
@@ -931,6 +1056,59 @@ export default function AnaliseDetailPage() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Tab: Auditoria */}
+        {tab === "auditoria" && (
+          <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/8">
+              <p className="text-xs font-semibold text-blue-200/60 uppercase tracking-wide">
+                Trilha de Auditoria
+              </p>
+            </div>
+            {auditTrail.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-2 text-blue-200/30">
+                <ClipboardList className="w-7 h-7" />
+                <p className="text-sm">Nenhum evento de auditoria registrado.</p>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-white/5 border-b border-white/10">
+                  <tr>
+                    {["Usuário", "Ação", "Detalhes", "Data / hora"].map((h) => (
+                      <th key={h} className="text-left px-4 py-3 text-xs font-medium text-blue-200/50 uppercase tracking-wide">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {auditTrail.map((entry) => {
+                    let extra: Record<string, unknown> | null = null;
+                    try { if (entry.extra_data) extra = JSON.parse(entry.extra_data); } catch {}
+                    return (
+                      <tr key={entry.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3 text-white/80 text-xs">{entry.username}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-blue-300 bg-blue-400/10 border border-blue-400/20">
+                            {AUDIT_ACTION_LABELS[entry.action] ?? entry.action}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-blue-200/40 font-mono text-xs max-w-[320px] truncate">
+                          {extra ? Object.entries(extra).map(([k, v]) => `${k}: ${v}`).join(", ") : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-blue-200/50 text-xs whitespace-nowrap">
+                          {entry.created_at
+                            ? new Date(entry.created_at + (entry.created_at.endsWith("Z") ? "" : "Z")).toLocaleString("pt-BR")
+                            : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
       </main>

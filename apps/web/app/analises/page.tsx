@@ -5,6 +5,7 @@ import Link from "next/link";
 import AppHeader from "@/components/layout/AppHeader";
 import AppFooter from "@/components/layout/AppFooter";
 import EmptyState from "@/components/ui/EmptyState";
+import ApprovalBadge from "@/components/ui/ApprovalBadge";
 import { BarChart2, Upload, RefreshCw, FileSpreadsheet, CheckCircle, Clock, AlertCircle, Loader2, Trash2, FileText, PieChart, ShieldCheck, User } from "lucide-react";
 import { api } from "@/lib/api";
 import { Analysis } from "@/types/analysis";
@@ -181,6 +182,7 @@ export default function AnalisesPage() {
                   <th className="text-left px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Arquivo</th>
                   <th className="text-left px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Tipo</th>
                   <th className="text-left px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Status</th>
+                  <th className="text-left px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Aprovação</th>
                   <th className="text-right px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Linhas</th>
                   <th className="text-left px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Criado por</th>
                   <th className="text-left px-4 py-3 font-medium text-blue-200/60 text-xs uppercase tracking-wide">Data</th>
@@ -201,6 +203,7 @@ export default function AnalisesPage() {
                     </td>
                     <td className="px-4 py-3 text-blue-200/55">{TYPE_LABEL[a.detected_type] ?? a.detected_type}</td>
                     <td className="px-4 py-3"><StatusBadge status={a.status} /></td>
+                    <td className="px-4 py-3">{a.approval_status && <ApprovalBadge status={a.approval_status} />}</td>
                     <td className="px-4 py-3 text-right text-blue-200/70">{a.total_rows.toLocaleString("pt-BR")}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {a.created_by ? (

@@ -1,28 +1,46 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.dependencies import require_analyst_or_admin
 from app.db.database import get_db
-from app.models.analysis import Analysis, CicloActivity
+from app.models.analysis import Analysis, CicloActivity, PendenciaTracking, gen_uuid
 from app.schemas.upload import UploadResponse, AnalysisResponse
 from app.services.file_reader import read_file
-from app.services.classifier import classify_spreadsheet
+from app.services.classifier import CLASSIFIER_VERSION, classify_spreadsheet
 from app.services.ciclo_analyzer import analyze_ciclos_with_breakdown
 from app.services.generic_analyzer import analyze_generic
 from app.services.pdf_reader import extract_pdf, summarize_pdf_indicators
+from app.services.pendencia_rules import classify_severity, is_pendencia
+from app.services.quality_validator import validate_quality
 from app.utils.file_utils import sanitize_filename
 from app.utils.file_validation import validate_file_bytes
 
 router = APIRouter()
 
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+
+
+def _audit(db: Session, username: str, action: str, entity_type: str, entity_id: str, meta: dict | None = None) -> None:
+    import json
+    from app.models.user import AuditLog, User
+    user = db.query(User).filter(User.username == username).first()
+    db.add(AuditLog(
+        user_id=user.id if user else None,
+        username=username,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        extra_data=json.dumps(meta) if meta else None,
+    ))
+    db.commit()
 
 
 async def _post_analysis_hooks(analysis, db: Session) -> None:
@@ -132,7 +150,8 @@ def _save_ciclo_activities(db: Session, analysis_id: str, df):
         pcdp_val = g("pcdp")
         processo_val = g("processo")
         cidade_val = g("cidade")
-        db.add(CicloActivity(
+        activity = CicloActivity(
+            id=gen_uuid(),
             analysis_id=analysis_id,
             item=g("item"), atividade=g("atividade"), gerencia=g("gerencia"),
             setor=g("setor"), regulado=g("regulado"), cidade=cidade_val,
@@ -143,7 +162,14 @@ def _save_ciclo_activities(db: Session, analysis_id: str, df):
             sem_pcdp=1 if _is_empty_val(pcdp_val) else 0,
             sem_processo=1 if _is_empty_val(processo_val) else 0,
             local_indefinido=1 if _is_empty_val(cidade_val) else 0,
-        ))
+        )
+        db.add(activity)
+        if is_pendencia(activity):
+            db.add(PendenciaTracking(
+                source_type="ciclo",
+                source_id=activity.id,
+                severity=classify_severity(activity),
+            ))
 
 
 @router.post("/upload", response_model=UploadResponse, tags=["Upload"])
@@ -184,6 +210,7 @@ async def upload_file(
 @router.post("/upload-and-analyze", response_model=AnalysisResponse, tags=["Upload"], status_code=201)
 async def upload_and_analyze(
     file: UploadFile = File(...),
+    force: bool = Query(False, description="Ignora erros bloqueantes de qualidade e prossegue com a análise."),
     current_user: str = Depends(require_analyst_or_admin),
     db: Session = Depends(get_db),
 ):
@@ -223,6 +250,17 @@ async def upload_and_analyze(
 
     detected_type, indicators = await loop.run_in_executor(None, _analyze)
 
+    quality_report = validate_quality(df, detected_type, db)
+    if quality_report["errors"] and not force:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "A planilha não passou na validação de qualidade. "
+                           "Corrija os erros listados ou reenvie com force=true para prosseguir mesmo assim.",
+                "quality_report": quality_report,
+            },
+        )
+
     now = datetime.now(timezone.utc)
     original_name = file.filename or safe_name
 
@@ -245,6 +283,7 @@ async def upload_and_analyze(
         total_rows=len(df),
         total_columns=len(df.columns),
         indicators=indicators,
+        quality_report=quality_report,
         created_by=current_user,
         parent_analysis_id=parent_id,
         version=version,
@@ -259,6 +298,16 @@ async def upload_and_analyze(
 
     db.commit()
     db.refresh(analysis)
+
+    _audit(db, current_user, "analysis_created", "analysis", str(analysis.id), {
+        "filename": analysis.original_filename,
+        "type": detected_type,
+        "file_hash": hashlib.sha256(content).hexdigest(),
+        "classifier_version": CLASSIFIER_VERSION,
+        "total_rows": analysis.total_rows,
+        "total_columns": analysis.total_columns,
+        "quality_score": quality_report["score"],
+    })
 
     # Verificar regras de alerta + enviar email de conclusão
     await _post_analysis_hooks(analysis, db)
@@ -313,6 +362,14 @@ async def upload_and_analyze_pdf(
     db.add(analysis)
     db.commit()
     db.refresh(analysis)
+
+    _audit(db, current_user, "analysis_created", "analysis", str(analysis.id), {
+        "filename": analysis.original_filename,
+        "type": "pdf",
+        "file_hash": hashlib.sha256(content).hexdigest(),
+        "total_rows": analysis.total_rows,
+        "total_columns": analysis.total_columns,
+    })
 
     await _post_analysis_hooks(analysis, db)
     return analysis
