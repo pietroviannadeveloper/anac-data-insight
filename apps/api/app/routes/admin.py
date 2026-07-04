@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import io
+import json
 import shutil
+import zipfile
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -16,9 +20,23 @@ from app.core.dependencies import require_admin
 from app.core.security import get_password_hash
 from app.db.database import get_db
 from app.models.analysis import Analysis
-from app.models.user import AccessLog, User
+from app.models.user import AccessLog, AuditLog, User
 
 router = APIRouter()
+
+
+def _audit(db: Session, username: str, action: str, entity_type: str | None = None,
+           entity_id: str | None = None, meta: dict | None = None) -> None:
+    user = db.query(User).filter(User.username == username).first()
+    db.add(AuditLog(
+        user_id=user.id if user else None,
+        username=username,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        extra_data=json.dumps(meta) if meta else None,
+    ))
+    db.commit()
 
 
 # ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -76,6 +94,7 @@ async def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    _audit(db, current_user, "user_created", "user", user.id, {"username": user.username, "role": user.role})
     return {"id": user.id, "username": user.username, "role": user.role, "is_active": user.is_active}
 
 
@@ -92,6 +111,8 @@ async def toggle_user_status(
         raise HTTPException(status_code=400, detail="Não é possível desativar o próprio usuário.")
     user.is_active = not user.is_active
     db.commit()
+    action = "user_activated" if user.is_active else "user_deactivated"
+    _audit(db, current_user, action, "user", user_id, {"target": user.username})
     return {"id": user.id, "username": user.username, "is_active": user.is_active}
 
 
@@ -109,6 +130,7 @@ async def reset_user_password(
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     user.password_hash = get_password_hash(body.password)
     db.commit()
+    _audit(db, current_user, "password_reset", "user", user_id, {"target": user.username})
     return {"ok": True}
 
 
@@ -123,6 +145,7 @@ async def delete_user(
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     if user.username == current_user:
         raise HTTPException(status_code=400, detail="Não é possível deletar o próprio usuário.")
+    _audit(db, current_user, "user_deleted", "user", user_id, {"target": user.username})
     db.delete(user)
     db.commit()
 
@@ -268,6 +291,7 @@ async def bulk_delete_analyses(
         raise HTTPException(status_code=400, detail="Nenhum ID fornecido.")
 
     analyses = db.query(Analysis).filter(Analysis.id.in_(ids)).all()
+    deleted_names = [a.original_filename for a in analyses]
     for analysis in analyses:
         stored = Path(settings.upload_dir) / str(analysis.stored_filename)
         if stored.exists():
@@ -275,6 +299,8 @@ async def bulk_delete_analyses(
         db.delete(analysis)
 
     db.commit()
+    _audit(db, current_user, "bulk_analyses_deleted", "analysis", None,
+           {"count": len(analyses), "filenames": deleted_names})
     return {"deleted": len(analyses)}
 
 
@@ -355,6 +381,72 @@ async def get_system_info(_: str = Depends(require_admin), db: Session = Depends
         "max_upload_size_mb": settings.max_upload_size_mb,
         "upload_dir": settings.upload_dir,
     }
+
+
+@router.get("/admin/audit-logs", tags=["Admin"])
+async def list_audit_logs(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    username: Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+    entity_type: Optional[str] = Query(None),
+    _: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    q = db.query(AuditLog)
+    if username:
+        q = q.filter(AuditLog.username.ilike(f"%{username}%"))
+    if action:
+        q = q.filter(AuditLog.action.ilike(f"%{action}%"))
+    if entity_type:
+        q = q.filter(AuditLog.entity_type == entity_type)
+
+    total = q.count()
+    items = q.order_by(AuditLog.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+
+    return {
+        "items": [
+            {
+                "id": lg.id,
+                "username": lg.username,
+                "action": lg.action,
+                "entity_type": lg.entity_type,
+                "entity_id": lg.entity_id,
+                "extra_data": lg.extra_data,
+                "created_at": lg.created_at.isoformat() if lg.created_at else None,
+            }
+            for lg in items
+        ],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }
+
+
+@router.get("/admin/analyses/export/zip", tags=["Admin"])
+async def bulk_export_zip(
+    _: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Cria um ZIP com todos os arquivos enviados e retorna para download."""
+    upload_dir = Path(settings.upload_dir)
+    analyses = db.query(Analysis).filter(Analysis.status == "completed").all()
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for a in analyses:
+            path = upload_dir / str(a.stored_filename)
+            if path.exists():
+                arcname = f"{a.created_at.strftime('%Y%m') if a.created_at else 'nodate'}/{a.original_filename}"
+                zf.write(path, arcname)
+    buf.seek(0)
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="anac_analyses_{ts}.zip"'},
+    )
 
 
 def _mask_db_url(url: str) -> str:

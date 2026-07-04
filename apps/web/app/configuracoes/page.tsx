@@ -9,7 +9,7 @@ import { auth } from "@/lib/auth";
 import {
   Settings, Bell, Mail, Plus, Trash2, Loader2, AlertCircle,
   CheckCircle, ToggleLeft, ToggleRight, ChevronDown, ChevronUp,
-  Calendar, Play,
+  Calendar, Play, KeyRound, Eye, EyeOff,
 } from "lucide-react";
 
 interface AlertRule {
@@ -57,7 +57,40 @@ const METRIC_LABELS: Record<string, string> = {
 };
 
 export default function ConfiguracoesPage() {
-  const isAdmin = auth.isAdmin();
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => { setIsAdmin(auth.isAdmin()); }, []);
+
+  // Troca de senha
+  const [pwCurrent, setPwCurrent] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwShowCurrent, setPwShowCurrent] = useState(false);
+  const [pwShowNew, setPwShowNew] = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError(null);
+    setPwSuccess(false);
+    if (pwNew.length < 6) return setPwError("A nova senha deve ter no mínimo 6 caracteres.");
+    if (pwNew !== pwConfirm) return setPwError("As senhas não coincidem.");
+    setPwSaving(true);
+    try {
+      await api.post("/api/v1/auth/change-password", {
+        current_password: pwCurrent,
+        new_password: pwNew,
+      });
+      setPwSuccess(true);
+      setPwCurrent(""); setPwNew(""); setPwConfirm("");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      setPwError(msg.includes("400") ? "Senha atual incorreta." : "Erro ao alterar a senha.");
+    } finally {
+      setPwSaving(false);
+    }
+  };
 
   // Alert rules
   const [rules, setRules] = useState<AlertRule[]>([]);
@@ -403,6 +436,84 @@ export default function ConfiguracoesPage() {
                 </div>
               </div>
             </div>
+          </section>
+
+          {/* ── Troca de senha ───────────────────────────── */}
+          <section className="bg-white/5 border border-white/10 rounded-xl p-6">
+            <div className="flex items-start gap-3 mb-5">
+              <KeyRound className="w-5 h-5 text-blue-300/60 shrink-0 mt-0.5" />
+              <div>
+                <h2 className="text-sm font-semibold text-white">Alterar senha</h2>
+                <p className="text-xs text-blue-200/40 mt-0.5">Troque a senha da sua conta.</p>
+              </div>
+            </div>
+            <form onSubmit={handleChangePassword} className="space-y-4 max-w-sm">
+              <div>
+                <label className="block text-xs font-medium text-blue-200/60 mb-1.5">Senha atual</label>
+                <div className="relative">
+                  <input
+                    type={pwShowCurrent ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={pwCurrent}
+                    onChange={(e) => setPwCurrent(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 pr-10 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400/60 transition-colors"
+                    placeholder="Digite a senha atual"
+                  />
+                  <button type="button" tabIndex={-1} onClick={() => setPwShowCurrent((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-200/40 hover:text-white transition-colors">
+                    {pwShowCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-blue-200/60 mb-1.5">Nova senha</label>
+                <div className="relative">
+                  <input
+                    type={pwShowNew ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={pwNew}
+                    onChange={(e) => setPwNew(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 pr-10 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400/60 transition-colors"
+                    placeholder="Mínimo 6 caracteres"
+                  />
+                  <button type="button" tabIndex={-1} onClick={() => setPwShowNew((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-200/40 hover:text-white transition-colors">
+                    {pwShowNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-blue-200/60 mb-1.5">Confirmar nova senha</label>
+                <input
+                  type={pwShowNew ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={pwConfirm}
+                  onChange={(e) => setPwConfirm(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-blue-400/60 transition-colors"
+                  placeholder="Repita a nova senha"
+                />
+              </div>
+              {pwError && (
+                <div className="flex items-center gap-2 text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2.5">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {pwError}
+                </div>
+              )}
+              {pwSuccess && (
+                <div className="flex items-center gap-2 text-emerald-400 text-sm bg-emerald-400/10 border border-emerald-400/20 rounded-lg px-3 py-2.5">
+                  <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                  Senha alterada com sucesso.
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={pwSaving || !pwCurrent || !pwNew || !pwConfirm}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-[#003A70] hover:bg-[#0057A8] rounded-lg transition-colors disabled:opacity-50"
+              >
+                {pwSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                Alterar senha
+              </button>
+            </form>
           </section>
 
           {/* ── Versão ────────────────────────────────────── */}

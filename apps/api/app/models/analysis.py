@@ -35,6 +35,7 @@ class Analysis(Base):
     created_at = Column(DateTime, default=utcnow)
     completed_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)
+    deleted_at = Column(DateTime, nullable=True)
 
     ciclo_activities = relationship("CicloActivity", back_populates="analysis", cascade="all, delete-orphan")
     ai_analysis = relationship("AIAnalysis", back_populates="analysis", uselist=False, cascade="all, delete-orphan")

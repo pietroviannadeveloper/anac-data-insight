@@ -8,13 +8,14 @@ import {
   Users, ShieldCheck, Loader2, AlertCircle, Plus, X, CheckCircle,
   XCircle, KeyRound, Trash2, RefreshCw, Eye, EyeOff, ChevronLeft,
   ChevronRight, LogIn, LogOut, FileText, FileSpreadsheet, User,
+  ClipboardList, Download,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "usuarios" | "acessos" | "arquivos";
+type Tab = "usuarios" | "acessos" | "arquivos" | "auditoria";
 
 interface AdminUser {
   id: string;
@@ -842,6 +843,14 @@ const ArquivosTab = () => {
           </button>
         )}
         <span className="text-xs text-blue-200/30 ml-auto">{total} arquivo{total !== 1 ? "s" : ""}</span>
+        <a
+          href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/admin/analyses/export/zip`}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-emerald-300 bg-emerald-400/10 border border-emerald-400/20 rounded-lg hover:bg-emerald-400/20 transition-colors"
+          title="Baixar todos os arquivos como ZIP"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Exportar ZIP
+        </a>
       </div>
 
       {/* Table */}
@@ -956,6 +965,208 @@ const ArquivosTab = () => {
   );
 };
 
+// ─── Tab: Auditoria ───────────────────────────────────────────────────────────
+
+interface AuditLog {
+  id: string;
+  username: string;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  extra_data: string | null;
+  created_at: string | null;
+}
+
+const ACTION_COLORS: Record<string, string> = {
+  user_created:              "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
+  user_deleted:              "text-red-400 bg-red-400/10 border-red-400/20",
+  user_activated:            "text-emerald-400 bg-emerald-400/10 border-emerald-400/20",
+  user_deactivated:          "text-yellow-400 bg-yellow-400/10 border-yellow-400/20",
+  password_reset:            "text-blue-300 bg-blue-400/10 border-blue-400/20",
+  analysis_soft_deleted:     "text-orange-400 bg-orange-400/10 border-orange-400/20",
+  analysis_deleted_permanent:"text-red-400 bg-red-400/10 border-red-400/20",
+  analysis_restored:         "text-teal-400 bg-teal-400/10 border-teal-400/20",
+  bulk_analyses_deleted:     "text-red-400 bg-red-400/10 border-red-400/20",
+  analysis_created:          "text-blue-300 bg-blue-400/10 border-blue-400/20",
+  excel_exported:            "text-indigo-300 bg-indigo-400/10 border-indigo-400/20",
+  pdf_exported:              "text-purple-300 bg-purple-400/10 border-purple-400/20",
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  user_created:               "Usuário criado",
+  user_deleted:               "Usuário excluído",
+  user_activated:             "Usuário ativado",
+  user_deactivated:           "Usuário desativado",
+  password_reset:             "Senha redefinida",
+  analysis_soft_deleted:      "Análise movida p/ lixeira",
+  analysis_deleted_permanent: "Análise excluída",
+  analysis_restored:          "Análise restaurada",
+  bulk_analyses_deleted:      "Exclusão em lote",
+  analysis_created:           "Análise criada",
+  excel_exported:             "Exportação Excel",
+  pdf_exported:               "Exportação PDF",
+};
+
+const AuditoriaTab = () => {
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [filterUser, setFilterUser] = useState("");
+  const [filterAction, setFilterAction] = useState("");
+  const perPage = 20;
+
+  const fetchLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        per_page: String(perPage),
+        ...(filterUser && { username: filterUser }),
+        ...(filterAction && { action: filterAction }),
+      });
+      const data = await api.get(`/api/v1/admin/audit-logs?${params}`);
+      setLogs(data.items);
+      setTotal(data.total);
+    } catch {
+      setLogs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, filterUser, filterAction]);
+
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+  const totalPages = Math.ceil(total / perPage) || 1;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          placeholder="Filtrar por usuário..."
+          value={filterUser}
+          onChange={(e) => { setFilterUser(e.target.value); setPage(1); }}
+          className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-blue-200/80 placeholder:text-blue-200/30 focus:outline-none focus:border-blue-400/50 w-44"
+        />
+        <input
+          type="text"
+          placeholder="Filtrar por ação..."
+          value={filterAction}
+          onChange={(e) => { setFilterAction(e.target.value); setPage(1); }}
+          className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-blue-200/80 placeholder:text-blue-200/30 focus:outline-none focus:border-blue-400/50 w-44"
+        />
+        <div className="flex-1" />
+        <button
+          onClick={fetchLogs}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm text-blue-200/60 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors"
+          aria-label="Atualizar"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+        </button>
+        <span className="text-xs text-blue-200/30">{total} evento{total !== 1 ? "s" : ""}</span>
+      </div>
+
+      <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 gap-2 text-blue-200/50">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">Carregando auditoria...</span>
+          </div>
+        ) : (
+          <>
+            <table className="w-full text-sm">
+              <thead className="bg-white/5 border-b border-white/10">
+                <tr>
+                  {["Usuário", "Ação", "Entidade", "Detalhes", "Data / hora"].map((h) => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-medium text-blue-200/50 uppercase tracking-wide">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {logs.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-12 text-center text-blue-200/40 text-sm">
+                      Nenhum evento registrado.
+                    </td>
+                  </tr>
+                ) : (
+                  logs.map((log) => {
+                    const cls = ACTION_COLORS[log.action] ?? "text-blue-200/60 bg-white/5 border-white/10";
+                    const label = ACTION_LABELS[log.action] ?? log.action;
+                    let extra: Record<string, unknown> | null = null;
+                    try { if (log.extra_data) extra = JSON.parse(log.extra_data); } catch {}
+                    return (
+                      <tr key={log.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-white/8 flex items-center justify-center flex-shrink-0">
+                              <span className="text-[10px] font-bold text-blue-200/60">
+                                {log.username[0]?.toUpperCase() ?? "?"}
+                              </span>
+                            </div>
+                            <span className="font-medium text-white/80 text-xs">{log.username}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls}`}>
+                            {label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-blue-200/50 text-xs">
+                          {log.entity_type ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-blue-200/40 font-mono text-xs max-w-[200px] truncate">
+                          {extra
+                            ? Object.entries(extra).map(([k, v]) => `${k}: ${v}`).join(", ")
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-blue-200/50 text-xs whitespace-nowrap">
+                          {fmtDate(log.created_at)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-white/10">
+                <p className="text-xs text-blue-200/40">
+                  {(page - 1) * perPage + 1}–{Math.min(page * perPage, total)} de {total}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="p-1.5 rounded-lg text-blue-200/50 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-30 transition-colors"
+                    aria-label="Página anterior"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs text-blue-200/50 min-w-[4rem] text-center">
+                    {page} / {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="p-1.5 rounded-lg text-blue-200/50 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-30 transition-colors"
+                    aria-label="Próxima página"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -1020,11 +1231,23 @@ export default function AdminPage() {
             <FileText className="w-4 h-4" />
             Histórico de arquivos
           </button>
+          <button
+            onClick={() => setActiveTab("auditoria")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+              activeTab === "auditoria"
+                ? "bg-[#003A70] text-white"
+                : "text-blue-200/60 hover:text-white hover:bg-white/5"
+            }`}
+          >
+            <ClipboardList className="w-4 h-4" />
+            Auditoria
+          </button>
         </div>
 
         {activeTab === "usuarios" && <UsuariosTab />}
         {activeTab === "acessos" && <AcessosTab />}
         {activeTab === "arquivos" && <ArquivosTab />}
+        {activeTab === "auditoria" && <AuditoriaTab />}
       </main>
       <AppFooter />
     </div>

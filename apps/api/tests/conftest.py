@@ -8,7 +8,20 @@ from sqlalchemy.pool import StaticPool
 from app.db.database import Base, get_db
 from app.main import app
 from app.core.security import get_password_hash
+from app.core.rate_limit import reset_for_testing, rate_limit
 from app.models.user import User
+
+
+@pytest.fixture(autouse=True)
+def _bypass_rate_limit():
+    """Desabilita rate limiting em todos os testes substituindo a dependência."""
+    async def _noop(request=None):  # noqa: ANN001
+        return None
+
+    # Override todas as variantes de rate_limit que possam estar registradas
+    reset_for_testing()
+    yield
+    reset_for_testing()
 
 
 @pytest.fixture(scope="session")

@@ -36,5 +36,12 @@ class Settings(BaseSettings):
     auth_password: str = "Pietro007@"
     access_token_expire_minutes: int = 480  # 8 horas
 
+    # Login com Google — vazio desabilita o botão/endpoint
+    google_client_id: str = ""
+
+    # Pool de conexões PostgreSQL
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+
 
 settings = Settings()

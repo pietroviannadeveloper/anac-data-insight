@@ -223,7 +223,7 @@ async def list_analyses(
     _: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Analysis)
+    q = db.query(Analysis).filter(Analysis.deleted_at.is_(None))
     if tag:
         q = q.filter(Analysis.tags.contains([tag]))
     total = q.count()
@@ -336,11 +336,47 @@ async def delete_analysis(
     current_user: str = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    """Soft delete: marca deleted_at. Arquivo físico permanece para possível restore."""
     analysis = _get_analysis_or_404(analysis_id, db)
+    analysis.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    _audit(db, current_user, "analysis_soft_deleted", "analysis", analysis_id,
+           {"filename": analysis.original_filename})
+
+
+@router.post("/analyses/{analysis_id}/restore", status_code=200, tags=["Analyses"])
+async def restore_analysis(
+    analysis_id: str,
+    current_user: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Restaura uma análise previamente removida (soft delete)."""
+    analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Análise não encontrada.")
+    if analysis.deleted_at is None:
+        raise HTTPException(status_code=400, detail="Análise não está na lixeira.")
+    analysis.deleted_at = None
+    db.commit()
+    _audit(db, current_user, "analysis_restored", "analysis", analysis_id,
+           {"filename": analysis.original_filename})
+    return {"ok": True}
+
+
+@router.delete("/analyses/{analysis_id}/permanent", status_code=204, tags=["Analyses"])
+async def delete_analysis_permanent(
+    analysis_id: str,
+    current_user: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Exclusão permanente — remove arquivo físico e registro do banco."""
+    analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Análise não encontrada.")
     stored = Path(settings.upload_dir) / str(analysis.stored_filename)
     if stored.exists():
         stored.unlink()
-    _audit(db, current_user, "analysis_deleted", "analysis", analysis_id,
+    _audit(db, current_user, "analysis_deleted_permanent", "analysis", analysis_id,
            {"filename": analysis.original_filename})
     db.delete(analysis)
     db.commit()

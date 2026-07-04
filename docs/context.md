@@ -1294,3 +1294,82 @@ E após o envio, perguntar ou detectar automaticamente o tipo de análise:
 
 Objetivo final:
 Permitir que o sistema funcione tanto para os arquivos específicos de ciclos quanto para documentos genéricos, sem bloquear a geração de relatório quando não houver uma análise completa de ciclos.
+
+
+
+Quero criar uma nova área chamada **/ptamensal**, destinada ao acompanhamento mensal do PTA 2026.
+
+Ao acessar a aba **/pta**, o usuário deverá visualizar dois botões principais:
+
+1. **PTA Histórico**
+
+   * Mantém o acesso às informações históricas já existentes.
+
+2. **Acompanhamento PTA Vigente**
+
+   * Nova área para acompanhar o PTA atual, com filtros, indicadores e visão gerencial da execução.
+
+A aba **Acompanhamento PTA Vigente** deve permitir filtrar as informações por:
+
+* Mês do ano de 2026;
+* Dia vigente, considerando a data e o horário atual;
+* Atividade;
+* Local;
+* Servidor responsável;
+* Status da execução;
+* Tipo de planilha enviada.
+
+Como o **PTA 2026 estará sempre em atualização**, o sistema deve permitir que o usuário **exclua uma planilha antiga** para enviar uma versão mais atualizada. Dessa forma, sempre que houver uma nova planilha do PTA, o usuário poderá substituir a anterior sem gerar conflito de informações.
+
+As planilhas devem ser organizadas por tipo, por exemplo:
+
+* **Ciclo Base**
+* **Desempenho**
+* **Controle PTA**
+* **PTA Final**
+* **Não Informadas**
+
+Caso uma planilha já esteja pronta, como **Controle PTA** ou **PTA Final**, ela também deverá poder ser enviada e analisada normalmente.
+
+O sistema deve permitir que o usuário envie **uma ou mais planilhas**, mas também deve funcionar quando o usuário enviar **apenas uma planilha**, entregando a análise possível com base nos dados disponíveis.
+
+Quando houver mais de uma planilha enviada, o sistema deve separar, identificar e cruzar as informações conforme o tipo de planilha, permitindo uma análise mais completa do PTA 2026.
+
+Essa área deve apresentar uma visualização em formato de BI, permitindo entender:
+
+* Quantos por cento do PTA planejado já foi realizado;
+* Quanto foi planejado para o ano;
+* Quanto foi executado até o momento;
+* Se a execução está acima, abaixo ou dentro do previsto;
+* Se alguma atividade foi realizada além do necessário;
+* Se o cronograma está adiantado ou atrasado;
+* Quais atividades deveriam receber mais atenção no ano;
+* Quais atividades estão em andamento no dia vigente;
+* Em quais locais as atividades estão sendo realizadas;
+* Quais servidores estão envolvidos;
+* Quais servidores estão fora ou indisponíveis;
+* Quanto tempo cada atividade deve durar;
+* Quanto tempo cada atividade já levou para ser executada;
+* Se as atividades previstas para determinado mês, como junho, já foram concluídas ou ainda estão pendentes.
+
+O objetivo principal dessa funcionalidade é melhorar o controle diário do PTA, oferecendo uma visão clara do que foi planejado, do que já foi executado e do que ainda precisa ser feito.
+
+A nova tela deve ajudar a responder perguntas como:
+
+* O que deveria estar sendo feito hoje?
+* Qual atividade está em execução agora?
+* Onde a atividade está sendo feita?
+* Quem está responsável por ela?
+* Quanto tempo falta para concluir?
+* A execução mensal está dentro do planejado?
+* Estamos adiantados ou atrasados em relação ao PTA anual?
+* Fizemos mais do que o necessário em alguma atividade?
+* Quais atividades precisam de reforço ou priorização?
+* Qual planilha está sendo usada como base para a análise?
+* Existe alguma planilha antiga que precisa ser removida ou substituída?
+* A análise está sendo feita com base em Ciclo Base, Desempenho, Controle PTA, PTA Final ou planilha não informada?
+
+A visualização deve ser objetiva, com indicadores percentuais, gráficos, filtros e separação por tipo de planilha, facilitando a tomada de decisão e o acompanhamento operacional do PTA ao longo de 2026.
+
+
+

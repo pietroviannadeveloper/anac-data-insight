@@ -5,13 +5,18 @@ from app.core.config import settings
 
 # SQLite needs check_same_thread=False; PostgreSQL does not need that flag
 connect_args = {}
-if settings.database_url.startswith("sqlite"):
+is_sqlite = settings.database_url.startswith("sqlite")
+if is_sqlite:
     connect_args = {"check_same_thread": False}
 
-engine = create_engine(
-    settings.database_url,
-    connect_args=connect_args,
-)
+_engine_kwargs: dict = {"connect_args": connect_args}
+if not is_sqlite:
+    # Pool de conexões para PostgreSQL em produção
+    _engine_kwargs["pool_size"] = getattr(settings, "db_pool_size", 10)
+    _engine_kwargs["max_overflow"] = getattr(settings, "db_max_overflow", 20)
+    _engine_kwargs["pool_pre_ping"] = True  # descarta conexões mortas automaticamente
+
+engine = create_engine(settings.database_url, **_engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -38,7 +43,19 @@ def create_tables():
     _ensure_role_column()
     _migrate_old_roles()
     _migrate_pta_mensal_columns()
+    _migrate_analyses_soft_delete()
     _seed_admin()
+
+
+def _migrate_analyses_soft_delete() -> None:
+    """Add deleted_at column to analyses table if it doesn't exist."""
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE analyses ADD COLUMN deleted_at DATETIME"))
+            conn.commit()
+    except Exception:
+        pass  # coluna já existe
 
 
 def _migrate_pta_mensal_columns() -> None:

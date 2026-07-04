@@ -6,6 +6,10 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class GoogleLoginRequest(BaseModel):
+    credential: str
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"

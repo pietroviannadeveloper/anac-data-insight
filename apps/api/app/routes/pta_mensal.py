@@ -233,6 +233,8 @@ async def get_summary(
             "sem_pcdp_valida":  getattr(a, "sem_pcdp_valida", a.sem_pcdp) or 0,
             "sem_processo":     a.sem_processo,
             "local_indefinido": a.local_indefinido,
+            "atividade":        a.atividade,
+            "tipo_ciclo":       a.tipo_ciclo,
         }
         for a in all_activities
     ]
@@ -335,3 +337,96 @@ async def list_activities(
         "page_size": page_size,
         "total_pages": max(1, (total + page_size - 1) // page_size),
     }
+
+
+@router.get("/pta-mensal/activities/export")
+async def export_activities_excel(
+    upload_id: Optional[str] = None,
+    tipo: Optional[str] = None,
+    mes: Optional[int] = None,
+    status: Optional[str] = None,
+    gerencia: Optional[str] = None,
+    cidade: Optional[str] = None,
+    servidor: Optional[str] = None,
+    search: Optional[str] = None,
+    mes_vigente: bool = False,
+    dia_vigente: bool = False,
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """Export filtered PTA mensal activities as an Excel workbook."""
+    import io
+    import polars as pl
+    from fastapi.responses import StreamingResponse
+    from datetime import date as _date
+
+    _mes_atual = _date.today().month
+    q = db.query(PTAMensalActivity)
+
+    if dia_vigente or mes_vigente:
+        q = q.filter(PTAMensalActivity.mes_num == _mes_atual)
+    if upload_id:
+        q = q.filter(PTAMensalActivity.upload_id == upload_id)
+    if tipo:
+        q = q.filter(PTAMensalActivity.tipo_ciclo == tipo)
+    if mes is not None:
+        q = q.filter(PTAMensalActivity.mes_num == mes)
+    if status:
+        q = q.filter(PTAMensalActivity.status == status)
+    if gerencia:
+        q = q.filter(PTAMensalActivity.gerencia.ilike(f"%{gerencia}%"))
+    if cidade:
+        q = q.filter(PTAMensalActivity.cidade.ilike(f"%{cidade}%"))
+    if servidor:
+        q = q.filter(PTAMensalActivity.servidor.ilike(f"%{servidor}%"))
+    if search:
+        like = f"%{search}%"
+        q = q.filter(
+            or_(
+                PTAMensalActivity.atividade.ilike(like),
+                PTAMensalActivity.regulado.ilike(like),
+                PTAMensalActivity.item.ilike(like),
+            )
+        )
+
+    rows = q.order_by(PTAMensalActivity.mes_num.asc()).all()
+    if not rows:
+        raise HTTPException(status_code=404, detail="Nenhuma atividade encontrada com os filtros aplicados.")
+
+    data = [
+        {
+            "Item": r.item or "",
+            "Atividade": r.atividade or "",
+            "Gerência": r.gerencia or "",
+            "Setor": r.setor or "",
+            "Regulado": r.regulado or "",
+            "Cidade": r.cidade or "",
+            "Servidor": r.servidor or "",
+            "Mês Planejado": r.mes or "",
+            "Mês Agendado": r.mes_agendado or "",
+            "Mês Realizado": r.mes_realizado or "",
+            "GIASO": r.giaso or "",
+            "Processo": r.processo or "",
+            "PCDP": r.pcdp or "",
+            "Prioridade": r.prioridade or "",
+            "Status": r.status or "",
+            "Tipo": r.tipo_ciclo or "",
+            "Sem GIASO": r.sem_giaso,
+            "Sem PCDP": r.sem_pcdp,
+            "Sem Processo": r.sem_processo,
+            "Local Indefinido": r.local_indefinido,
+        }
+        for r in rows
+    ]
+
+    df = pl.DataFrame(data)
+    buf = io.BytesIO()
+    df.write_excel(buf)
+    buf.seek(0)
+
+    filename = f"atividades-pta-{_date.today().isoformat()}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

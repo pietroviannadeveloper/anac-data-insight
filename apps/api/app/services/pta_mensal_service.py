@@ -285,6 +285,33 @@ def compute_bi_summary(activities: list[dict]) -> dict:
             if cidade:
                 por_servidor[s]["_cidades_mv"].add(cidade)
 
+    # ── por tipo de atividade (código completo: O135-501, RAMP-503, etc.) ────
+    import re as _re
+    _CODE_RE = _re.compile(r'^([A-Z][A-Z0-9]+-\d+)')
+    por_tipo: dict[str, dict] = {}
+    for a in activities:
+        raw = a.get("atividade") or ""
+        m = _CODE_RE.match(raw)
+        # Extrai também o nome curto após " - "
+        if m:
+            t = m.group(1)
+            parts = raw.split(" - ", 1)
+            label = parts[1].strip() if len(parts) > 1 else t
+        else:
+            t = "Outros"
+            label = "Outros"
+        if t not in por_tipo:
+            por_tipo[t] = {"total": 0, "realizado": 0, "agendado": 0, "label": label}
+        por_tipo[t]["total"] += 1
+        if t not in por_tipo:
+            por_tipo[t] = {"total": 0, "realizado": 0, "agendado": 0}
+        por_tipo[t]["total"] += 1
+        st = a.get("status", "")
+        if st == "realizado":
+            por_tipo[t]["realizado"] += 1
+        elif st == "agendado":
+            por_tipo[t]["agendado"] += 1
+
     # ── pcdp stats (mes_atual já definido acima) ─────────────────────────────
     pcdp_counter: dict[str, int] = {}
     pcdp_tipo_counter: dict[str, int] = {"valida": 0, "remota": 0, "cancelada": 0, "especial": 0, "vazia": 0}
@@ -332,6 +359,18 @@ def compute_bi_summary(activities: list[dict]) -> dict:
         "planejado_por_mes":      {str(k): v for k, v in sorted(planejado_por_mes.items())},
         "realizado_por_mes":      {str(k): v for k, v in sorted(realizado_por_mes.items())},
         "agendado_por_mes":       {str(k): v for k, v in sorted(agendado_por_mes.items())},
+        # por tipo de atividade (código completo + label descritivo)
+        "por_tipo": [
+            {
+                "tipo": k,
+                "label": v["label"],
+                "total": v["total"],
+                "realizado": v["realizado"],
+                "agendado": v["agendado"],
+                "taxa": round(v["realizado"] / v["total"] * 100, 1) if v["total"] else 0.0,
+            }
+            for k, v in sorted(por_tipo.items(), key=lambda x: -x[1]["total"])
+        ],
         # breakdowns
         "por_gerencia": [
             {"gerencia": k, **v, "taxa": round(v["realizado"] / v["total"] * 100, 1) if v["total"] else 0}

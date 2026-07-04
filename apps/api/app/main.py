@@ -125,6 +125,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Prometheus metrics — expõe /metrics; silenciosamente desabilitado se lib ausente
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+except ImportError:
+    pass
+
 # ── Middlewares (ordem importa: último adicionado = primeiro executado) ────────
 dev_origins = [
     "http://localhost:3000",

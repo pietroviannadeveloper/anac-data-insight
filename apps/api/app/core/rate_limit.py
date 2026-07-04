@@ -37,6 +37,12 @@ class _InMemoryRateLimiter:
 _limiter = _InMemoryRateLimiter()
 
 
+def reset_for_testing() -> None:
+    """Limpa o estado do rate limiter — use apenas em testes."""
+    with _limiter._lock:
+        _limiter._store.clear()
+
+
 def rate_limit(max_requests: int, window_seconds: int = 60) -> Callable:
     """
     Dependência FastAPI que bloqueia quando o IP ultrapassa o limite.

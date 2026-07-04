@@ -8,12 +8,25 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://anac:anac@postgres:5432/anac_db
+      - DATABASE_URL=postgresql://anac:${POSTGRES_PASSWORD:-anac}@postgres:5432/anac_db
       - UPLOAD_DIR=/data/uploads
       - GENERATED_DIR=/data/generated
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - ENVIRONMENT=development
-      - CORS_ORIGINS=["http://localhost:3000"]
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY obrigatório em produção}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000"]}
+      - AUTH_USERNAME=${AUTH_USERNAME:-admin}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:?AUTH_PASSWORD obrigatório em produção}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      # Pool PostgreSQL
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-10}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-20}
     volumes:
       - uploads:/data/uploads
       - generated:/data/generated
@@ -21,6 +34,12 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   web:
     build:
@@ -29,16 +48,17 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: anac
-      POSTGRES_PASSWORD: anac
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-anac}
       POSTGRES_DB: anac_db
     ports:
       - "5432:5432"
