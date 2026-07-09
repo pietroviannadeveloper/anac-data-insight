@@ -24,6 +24,7 @@ import AppHeader from "@/components/layout/AppHeader";
 import AppFooter from "@/components/layout/AppFooter";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Reveal } from "@/components/ui/Reveal";
+import { Tabs, TabList, Tab, TabPanel } from "@/components/ui/Tabs";
 import { SkeletonDashboard } from "@/components/ui/Skeleton";
 import { AIChat } from "@/components/ui/AIChat";
 import { useCountUp } from "@/hooks/useCountUp";
@@ -133,6 +134,13 @@ const MESES = [
 ];
 
 const PIE_COLORS = ["#34d399", "#60a5fa", "#f97316"];
+
+// Mapa do rótulo exibido na fatia da pizza para o valor usado no filtro de status da tabela
+const PIE_NAME_TO_STATUS: Record<string, string> = {
+  Realizado: "realizado",
+  Agendado: "agendado",
+  "Sem Agend.": "sem-agendamento",
+};
 
 // Cores sólidas por série (os marks usam gradientes; tooltip/legenda usam estas)
 const SERIES_COLORS: Record<string, string> = {
@@ -259,38 +267,6 @@ function formatServidor(s: string): string {
   return s.replace(/\./g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/** Card com cabeçalho clicável que expande/recolhe o conteúdo (limpeza visual). */
-function CollapsibleCard({
-  title,
-  summary,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  summary?: React.ReactNode;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="mb-8 bg-white/4 rounded-xl border border-white/8 overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-white/4 transition-colors"
-      >
-        <h3 className="text-sm font-semibold text-white/80">{title}</h3>
-        {summary}
-        <ChevronDown
-          className={`w-4 h-4 text-white/40 ml-auto shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-      {open && children}
-    </div>
-  );
-}
-
 const PCDP_TIPO_META: Record<string, { label: string; color: string }> = {
   valida:    { label: "Válida",    color: "text-emerald-400" },
   remota:    { label: "Remota",    color: "text-blue-300" },
@@ -375,6 +351,9 @@ export default function PTAMensalPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Alvo de rolagem quando um clique em gráfico aplica um filtro na tabela de atividades
+  const activitiesRef = useRef<HTMLElement>(null);
+  const scrollToActivities = () => activitiesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // filters
   const [filterMes, setFilterMes] = useState<string>("");
@@ -388,6 +367,8 @@ export default function PTAMensalPage() {
   const [filterDiaVigente, setFilterDiaVigente] = useState(false);
   const [filterMesVigente, setFilterMesVigente] = useState(false);
   const [page, setPage] = useState(1);
+  // Colunas Processo/PCDP ficam ocultas por padrão (tabela densa); continuam pesquisáveis
+  const [showAllColumns, setShowAllColumns] = useState(false);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; tipo: string } | null>(null);
@@ -792,6 +773,7 @@ export default function PTAMensalPage() {
     const realizado = (bi?.realizado_por_mes ?? {})[String(m)] ?? 0;
     const agendado = (bi?.agendado_por_mes ?? {})[String(m)] ?? 0;
     return {
+      mesNum: m,
       mes: MESES[m],
       Planejado: planejado,
       Realizado: realizado,
@@ -809,6 +791,9 @@ export default function PTAMensalPage() {
   const pieDataVisible = pieData.filter((d) => d.value > 0);
 
   const mesAtual = new Date().getMonth() + 1;
+  const hasPcdp = !!bi && (bi.total_com_pcdp_valida ?? 0) + Object.values(bi.pcdp_por_tipo ?? {}).reduce((a, b) => a + b, 0) > 0;
+  // Primeira aba com dado disponível — evita abrir numa aba desabilitada/vazia
+  const defaultDashTab = (bi?.por_gerencia.length ?? 0) > 0 ? "gerencia" : (bi?.por_servidor.length ?? 0) > 0 ? "servidores" : "pcdps";
 
   // Métricas do período selecionado no dashboard
   const mesSel = periodoAnoCompleto ? null : periodoMes;
@@ -1092,23 +1077,18 @@ export default function PTAMensalPage() {
                 </button>
               </div>
             )}
-            {/* KPI cards — geral */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-              <KpiCard label="Total Planejado"    value={bi.total_planejado ?? 0}    color="text-white" />
-              <KpiCard label="Realizado"           value={bi.total_realizado ?? 0}    color="text-emerald-400"
-                sub={`${(bi.taxa_execucao ?? 0).toFixed(1)}% do total`} />
-              <KpiCard label="Agendado"            value={bi.total_agendado ?? 0}     color="text-blue-300" />
-              <KpiCard label="Sem Agendamento"     value={bi.total_sem_agendamento ?? 0} color="text-orange-400" />
-              <div className="bg-white/4 rounded-xl border border-white/8 px-5 py-4">
+            {/* Cronograma — não é um KPI do período, fica sempre visível independente do seletor */}
+            <div className="mb-4 bg-white/4 rounded-xl border border-white/8 px-5 py-4 flex items-center gap-4 flex-wrap">
+              <div>
                 <p className="text-blue-200/50 text-xs mb-1">Cronograma</p>
                 <SituacaoBadge situacao={bi.situacao_cronograma} />
-                <p className="text-white/30 text-xs mt-1">
-                  {bi.realizado_ate_mes_atual ?? 0} de {bi.planejado_ate_mes_atual ?? 0} até {MESES[mesAtual]}
-                </p>
               </div>
+              <p className="text-white/30 text-xs sm:ml-auto">
+                {bi.realizado_ate_mes_atual ?? 0} de {bi.planejado_ate_mes_atual ?? 0} realizadas até {MESES[mesAtual]}
+              </p>
             </div>
 
-            {/* KPI cards — período selecionado */}
+            {/* KPI cards — período selecionado (mês ou ano completo, via seletor no cabeçalho) */}
             <div className="mb-8 bg-blue-500/5 border border-blue-400/15 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
                 <CalendarDays className="w-4 h-4 text-blue-400" />
@@ -1124,6 +1104,7 @@ export default function PTAMensalPage() {
                       setFilterMes(String(periodoMes)); setFilterMesVigente(false); setFilterDiaVigente(false);
                     }
                     setPage(1);
+                    scrollToActivities();
                   }}
                   className="ml-auto flex items-center gap-1.5 px-3 py-1 text-xs bg-blue-500/20 hover:bg-blue-500/30 border border-blue-400/30 text-blue-300 rounded-lg transition-colors font-medium"
                 >
@@ -1131,22 +1112,10 @@ export default function PTAMensalPage() {
                 </button>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white/4 rounded-lg px-4 py-3">
-                  <p className="text-blue-200/40 text-xs mb-0.5">Planejado</p>
-                  <p className="text-white font-bold tabular-nums">{planejadoSel.toLocaleString("pt-BR")}</p>
-                </div>
-                <div className="bg-white/4 rounded-lg px-4 py-3">
-                  <p className="text-blue-200/40 text-xs mb-0.5">Realizadas</p>
-                  <p className="text-emerald-400 font-bold tabular-nums">{realizadoSel}</p>
-                </div>
-                <div className="bg-white/4 rounded-lg px-4 py-3">
-                  <p className="text-blue-200/40 text-xs mb-0.5">Agendadas</p>
-                  <p className="text-blue-300 font-bold tabular-nums">{agendadoSel}</p>
-                </div>
-                <div className="bg-white/4 rounded-lg px-4 py-3">
-                  <p className="text-blue-200/40 text-xs mb-0.5">Sem Agendamento</p>
-                  <p className="text-orange-400 font-bold tabular-nums">{semAgendSel}</p>
-                </div>
+                <KpiCard label="Planejado"        value={planejadoSel} color="text-white" />
+                <KpiCard label="Realizadas"       value={realizadoSel} color="text-emerald-400" />
+                <KpiCard label="Agendadas"        value={agendadoSel}  color="text-blue-300" />
+                <KpiCard label="Sem Agendamento"  value={semAgendSel}  color="text-orange-400" />
               </div>
             </div>
 
@@ -1194,12 +1163,20 @@ export default function PTAMensalPage() {
                 <div className="flex items-start justify-between mb-4">
                   <h3 className="text-sm font-semibold text-white/80">Execução Mensal</h3>
                   <span className="text-[10px] text-white/25 text-right leading-tight">
-                    Altura da coluna = planejado no mês (coluna <em>Mes</em> do PTA)
+                    Clique num mês para selecioná-lo no período acima
                   </span>
                 </div>
                 <Reveal height={240}>
                 <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={monthlyData} barCategoryGap="28%">
+                  <BarChart
+                    data={monthlyData}
+                    barCategoryGap="28%"
+                    className="cursor-pointer"
+                    onClick={(state) => {
+                      const mesNum = (state?.activePayload?.[0]?.payload as { mesNum?: number } | undefined)?.mesNum;
+                      if (mesNum) { setPeriodoMes(mesNum); setPeriodoAnoCompleto(false); }
+                    }}
+                  >
                     <defs>
                       <linearGradient id="gradRealizado" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#34d399" />
@@ -1241,7 +1218,10 @@ export default function PTAMensalPage() {
 
               {/* Status pie */}
               <div className="bg-white/4 rounded-xl border border-white/8 p-5">
-                <h3 className="text-sm font-semibold text-white/80 mb-4">Distribuição de Status</h3>
+                <div className="flex items-start justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-white/80">Distribuição de Status</h3>
+                  <span className="text-[10px] text-white/25 text-right leading-tight">Clique para filtrar a tabela</span>
+                </div>
                 <Reveal height={170}>
                 <div className="relative">
                   <ResponsiveContainer width="100%" height={170}>
@@ -1261,6 +1241,11 @@ export default function PTAMensalPage() {
                         )}
                         onMouseEnter={(_, i) => setPieActive(i)}
                         onMouseLeave={() => setPieActive(-1)}
+                        onClick={(d) => {
+                          const status = PIE_NAME_TO_STATUS[(d as { name?: string }).name ?? ""];
+                          if (status) { setFilterStatus(status); setPage(1); scrollToActivities(); }
+                        }}
+                        className="cursor-pointer"
                         animationDuration={900}
                         animationEasing="ease-out"
                       >
@@ -1293,12 +1278,22 @@ export default function PTAMensalPage() {
               </div>
             </div>
 
-            {/* Por Gerência chart */}
-            {bi.por_gerencia.length > 0 && (
-              <div className="mb-8 bg-white/4 rounded-xl border border-white/8 p-5">
+            {/* Seções secundárias — agrupadas em abas para reduzir a altura da página */}
+            <div className="mb-8 bg-white/4 rounded-xl border border-white/8 p-5">
+              <Tabs defaultTab={defaultDashTab} key={defaultDashTab}>
+                <TabList className="mb-4">
+                  <Tab id="gerencia" disabled={bi.por_gerencia.length === 0}>Execução por Gerência</Tab>
+                  <Tab id="servidores" disabled={bi.por_servidor.length === 0}>
+                    Servidores{bi.por_servidor.length > 0 ? ` (${bi.por_servidor.length})` : ""}
+                  </Tab>
+                  <Tab id="pcdps" disabled={!hasPcdp}>PCDPs</Tab>
+                </TabList>
+
+                <TabPanel id="gerencia">
+                {bi.por_gerencia.length > 0 && (
+              <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-white/80">Execução por Gerência</h3>
-                  <span className="text-[10px] text-white/25">barra completa = total planejado · % = taxa de execução</span>
+                  <span className="text-[10px] text-white/25">barra completa = total planejado · % = taxa de execução · clique para filtrar a tabela</span>
                 </div>
                 <Reveal height={Math.max(180, bi.por_gerencia.slice(0, 12).length * 34)}>
                 <ResponsiveContainer width="100%" height={Math.max(180, bi.por_gerencia.slice(0, 12).length * 34)}>
@@ -1312,6 +1307,11 @@ export default function PTAMensalPage() {
                     layout="vertical"
                     barCategoryGap="32%"
                     margin={{ right: 44 }}
+                    className="cursor-pointer"
+                    onClick={(state) => {
+                      const name = (state?.activePayload?.[0]?.payload as { name?: string } | undefined)?.name;
+                      if (name) { setFilterGerencia(name); setPage(1); scrollToActivities(); }
+                    }}
                   >
                     <defs>
                       <linearGradient id="gradGerencia" x1="0" y1="0" x2="1" y2="0">
@@ -1337,15 +1337,12 @@ export default function PTAMensalPage() {
                 </ResponsiveContainer>
                 </Reveal>
               </div>
-            )}
+                )}
+                </TabPanel>
 
-            {/* Servidores table */}
-            {bi.por_servidor.length > 0 && (
-              <CollapsibleCard
-                title="Servidores"
-                summary={<span className="text-xs text-white/30">{bi.por_servidor.length}</span>}
-              >
-                <div className="overflow-x-auto border-t border-white/8">
+                <TabPanel id="servidores">
+                {bi.por_servidor.length > 0 && (
+                <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-white/8 text-xs text-white/40">
@@ -1387,20 +1384,16 @@ export default function PTAMensalPage() {
                     </tbody>
                   </table>
                 </div>
-              </CollapsibleCard>
-            )}
+                )}
+                </TabPanel>
 
-            {/* PCDP stats */}
-            {bi && (bi.total_com_pcdp_valida ?? 0) + Object.values(bi.pcdp_por_tipo ?? {}).reduce((a,b) => a+b, 0) > 0 && (
-              <CollapsibleCard
-                title="PCDPs"
-                summary={
-                  <span className="text-xs text-white/30">
-                    {bi.unique_pcdps ?? 0} únicas · {bi.pcdp_duplicadas ?? 0} duplicadas
-                  </span>
-                }
-              >
-                <div className="px-5 py-3 border-t border-white/8 flex gap-3 flex-wrap">
+                <TabPanel id="pcdps">
+                {hasPcdp && (
+                <div>
+                <p className="text-xs text-white/30 mb-3">
+                  {bi.unique_pcdps ?? 0} únicas · {bi.pcdp_duplicadas ?? 0} duplicadas
+                </p>
+                <div className="flex gap-3 flex-wrap mb-3">
                   {Object.entries(bi.pcdp_por_tipo ?? {}).map(([tipo, count]) => count > 0 && (
                     <span key={tipo} className="flex items-center gap-1.5 text-xs">
                       <span className={PCDP_TIPO_META[tipo]?.color ?? "text-white/40"}>
@@ -1410,7 +1403,7 @@ export default function PTAMensalPage() {
                     </span>
                   ))}
                 </div>
-                <div className="overflow-x-auto max-h-52 overflow-y-auto border-t border-white/8">
+                <div className="overflow-x-auto max-h-52 overflow-y-auto">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-[#001E3C]">
                       <tr className="border-b border-white/8 text-white/40">
@@ -1434,13 +1427,16 @@ export default function PTAMensalPage() {
                     </tbody>
                   </table>
                 </div>
-              </CollapsibleCard>
-            )}
+                </div>
+                )}
+                </TabPanel>
+              </Tabs>
+            </div>
           </>
         )}
 
         {/* ── Activities Table ────────────────────────────────────── */}
-        <section className="bg-white/4 rounded-xl border border-white/8 overflow-hidden">
+        <section ref={activitiesRef} className="bg-white/4 rounded-xl border border-white/8 overflow-hidden">
           <div className="px-5 py-4 border-b border-white/8">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
@@ -1537,6 +1533,16 @@ export default function PTAMensalPage() {
               >
                 Limpar filtros
               </button>
+              <button
+                onClick={() => setShowAllColumns((v) => !v)}
+                className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
+                  showAllColumns
+                    ? "bg-blue-500/20 border-blue-400/40 text-blue-300"
+                    : "bg-white/5 border-white/10 text-white/50 hover:text-white/80 hover:bg-white/10"
+                }`}
+              >
+                {showAllColumns ? "Ocultar colunas extras" : "Mostrar todas as colunas"}
+              </button>
             </div>
           </div>
 
@@ -1560,8 +1566,8 @@ export default function PTAMensalPage() {
                       <th className="px-3 py-2.5 text-left font-medium">Regulado</th>
                       <th className="px-3 py-2.5 text-left font-medium">Cidade</th>
                       <th className="px-3 py-2.5 text-left font-medium">Servidor (GIASO)</th>
-                      <th className="px-3 py-2.5 text-left font-medium">Processo</th>
-                      <th className="px-3 py-2.5 text-left font-medium">PCDP</th>
+                      {showAllColumns && <th className="px-3 py-2.5 text-left font-medium">Processo</th>}
+                      {showAllColumns && <th className="px-3 py-2.5 text-left font-medium">PCDP</th>}
                       <th className="px-3 py-2.5 text-left font-medium">Mês</th>
                       <th className="px-3 py-2.5 text-left font-medium">Status</th>
                       <th className="px-3 py-2.5 text-left font-medium">Tipo</th>
@@ -1577,8 +1583,8 @@ export default function PTAMensalPage() {
                         <td className="px-3 py-2 text-white/60 max-w-[120px] truncate">{a.regulado ?? "—"}</td>
                         <td className="px-3 py-2 text-white/60">{a.cidade ?? "—"}</td>
                         <td className="px-3 py-2 text-white/70" title={a.servidor ?? ""}>{a.servidor ? formatServidor(a.servidor) : "—"}</td>
-                        <td className="px-3 py-2 text-white/50 font-mono text-[11px]">{a.processo ?? "—"}</td>
-                        <td className="px-3 py-2 text-white/50 font-mono text-[11px]">{a.pcdp ?? "—"}</td>
+                        {showAllColumns && <td className="px-3 py-2 text-white/50 font-mono text-[11px]">{a.processo ?? "—"}</td>}
+                        {showAllColumns && <td className="px-3 py-2 text-white/50 font-mono text-[11px]">{a.pcdp ?? "—"}</td>}
                         <td className="px-3 py-2 text-white/60 tabular-nums">{a.mes_num ? MESES[a.mes_num] : (a.mes ?? "—")}</td>
                         <td className="px-3 py-2"><StatusBadge status={a.status} /></td>
                         <td className="px-3 py-2"><TipoBadge tipo={a.tipo_ciclo} /></td>
