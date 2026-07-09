@@ -16,10 +16,14 @@ import {
   PieChart,
   Pie,
   Cell,
+  Sector,
+  LabelList,
 } from "recharts";
+import type { TooltipProps } from "recharts";
 import AppHeader from "@/components/layout/AppHeader";
 import AppFooter from "@/components/layout/AppFooter";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Reveal } from "@/components/ui/Reveal";
 import { SkeletonDashboard } from "@/components/ui/Skeleton";
 import { AIChat } from "@/components/ui/AIChat";
 import { useCountUp } from "@/hooks/useCountUp";
@@ -129,6 +133,16 @@ const MESES = [
 ];
 
 const PIE_COLORS = ["#34d399", "#60a5fa", "#f97316"];
+
+// Cores sólidas por série (os marks usam gradientes; tooltip/legenda usam estas)
+const SERIES_COLORS: Record<string, string> = {
+  Realizado: "#34d399",
+  Agendado: "#60a5fa",
+  "Sem agendamento": "#fb923c",
+  "Sem Agend.": "#f97316",
+  "A executar": "rgba(255,255,255,0.35)",
+  Planejado: "#a5b4fc",
+};
 
 interface Upload {
   id: string;
@@ -285,6 +299,39 @@ const PCDP_TIPO_META: Record<string, { label: string; color: string }> = {
   vazia:     { label: "Vazia",     color: "text-white/30" },
 };
 
+/** Tooltip escuro compartilhado pelos gráficos. */
+function ChartTooltip({ active, payload, label }: TooltipProps<number, string>) {
+  if (!active || !payload?.length) return null;
+  const planejado = (payload[0]?.payload as Record<string, unknown>)?.Planejado;
+  return (
+    <div className="bg-[#0a1929]/95 backdrop-blur border border-white/12 rounded-lg px-3 py-2 shadow-xl text-xs">
+      {label != null && <p className="text-white/70 font-semibold mb-1.5">{label}</p>}
+      <div className="space-y-1">
+        {payload.map((item) => (
+          <div key={String(item.name)} className="flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-white/50">
+              <span
+                className="w-2 h-2 rounded-full inline-block"
+                style={{ background: SERIES_COLORS[String(item.name)] ?? item.color }}
+              />
+              {item.name}
+            </span>
+            <span className="text-white/85 font-semibold tabular-nums">
+              {Number(item.value ?? 0).toLocaleString("pt-BR")}
+            </span>
+          </div>
+        ))}
+      </div>
+      {typeof planejado === "number" && (
+        <div className="flex items-center justify-between gap-4 mt-1.5 pt-1.5 border-t border-white/10">
+          <span className="text-white/40">Planejado</span>
+          <span className="text-indigo-300 font-semibold tabular-nums">{planejado.toLocaleString("pt-BR")}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KpiCard({ label, value, sub, color = "text-white" }: { label: string; value: number; sub?: string; color?: string }) {
   const animated = useCountUp(value);
   return (
@@ -352,6 +399,9 @@ export default function PTAMensalPage() {
   // Período selecionado para o dashboard (independente dos filtros da tabela)
   const [periodoMes, setPeriodoMes] = useState<number>(new Date().getMonth() + 1);
   const [periodoAnoCompleto, setPeriodoAnoCompleto] = useState(false);
+
+  // Setor do donut em destaque (hover)
+  const [pieActive, setPieActive] = useState(-1);
 
   // Guard: admin only for upload actions, but all authenticated users can view
   useEffect(() => { setIsAdmin(auth.isAdmin()); }, []);
@@ -735,23 +785,28 @@ export default function PTAMensalPage() {
 
   const bi = summary?.consolidado;
 
-  // Build monthly chart data
+  // Build monthly chart data — coluna empilhada: a altura total ≈ planejado do mês
   const monthlyData = Array.from({ length: 12 }, (_, i) => {
     const m = i + 1;
+    const planejado = (bi?.planejado_por_mes ?? {})[String(m)] ?? 0;
+    const realizado = (bi?.realizado_por_mes ?? {})[String(m)] ?? 0;
+    const agendado = (bi?.agendado_por_mes ?? {})[String(m)] ?? 0;
     return {
       mes: MESES[m],
-      "Planejado (PTA)": (bi?.planejado_por_mes ?? {})[String(m)] ?? 0,
-      Realizado: (bi?.realizado_por_mes ?? {})[String(m)] ?? 0,
-      Agendado: (bi?.agendado_por_mes ?? {})[String(m)] ?? 0,
+      Planejado: planejado,
+      Realizado: realizado,
+      Agendado: agendado,
+      "Sem agendamento": Math.max(0, planejado - realizado - agendado),
     };
   });
 
-  // Status pie data
+  // Status pie data (cor atrelada ao nome, não ao índice)
   const pieData = bi ? [
-    { name: "Realizado", value: bi.total_realizado },
-    { name: "Agendado", value: bi.total_agendado },
-    { name: "Sem Agend.", value: bi.total_sem_agendamento },
+    { name: "Realizado", value: bi.total_realizado, color: PIE_COLORS[0] },
+    { name: "Agendado", value: bi.total_agendado, color: PIE_COLORS[1] },
+    { name: "Sem Agend.", value: bi.total_sem_agendamento, color: PIE_COLORS[2] },
   ] : [];
+  const pieDataVisible = pieData.filter((d) => d.value > 0);
 
   const mesAtual = new Date().getMonth() + 1;
 
@@ -1137,56 +1192,98 @@ export default function PTAMensalPage() {
               {/* Monthly bar chart */}
               <div className="lg:col-span-2 bg-white/4 rounded-xl border border-white/8 p-5">
                 <div className="flex items-start justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-white/80">Planejado × Realizado por Mês</h3>
+                  <h3 className="text-sm font-semibold text-white/80">Execução Mensal</h3>
                   <span className="text-[10px] text-white/25 text-right leading-tight">
-                    Planejado = coluna <em>Mes</em> original do PTA
+                    Altura da coluna = planejado no mês (coluna <em>Mes</em> do PTA)
                   </span>
                 </div>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={monthlyData} barCategoryGap="20%">
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <Reveal height={240}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={monthlyData} barCategoryGap="28%">
+                    <defs>
+                      <linearGradient id="gradRealizado" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#34d399" />
+                        <stop offset="100%" stopColor="#059669" stopOpacity={0.85} />
+                      </linearGradient>
+                      <linearGradient id="gradAgendado" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#60a5fa" />
+                        <stop offset="100%" stopColor="#2563eb" stopOpacity={0.85} />
+                      </linearGradient>
+                      <linearGradient id="gradSemAgend" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#fb923c" />
+                        <stop offset="100%" stopColor="#f97316" stopOpacity={0.9} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.05)" />
                     <XAxis dataKey="mes" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip
-                      contentStyle={{ background: "#0a1929", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 12 }}
-                      labelStyle={{ color: "rgba(255,255,255,0.7)" }}
+                    <YAxis tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }} axisLine={false} tickLine={false} width={36} />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                    <Legend
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}
+                      payload={[
+                        { value: "Realizado", type: "circle", color: "#34d399" },
+                        { value: "Agendado", type: "circle", color: "#60a5fa" },
+                        { value: "Sem agendamento", type: "circle", color: "#fb923c" },
+                      ]}
                     />
-                    <Legend wrapperStyle={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }} />
-                    <Bar dataKey="Planejado (PTA)" fill="#6366f1" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="Realizado"       fill="#34d399" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="Agendado"        fill="#60a5fa" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="Realizado" stackId="mes" fill="url(#gradRealizado)" stroke="#0c2440" strokeWidth={1}
+                      animationDuration={900} animationEasing="ease-out" />
+                    <Bar dataKey="Agendado" stackId="mes" fill="url(#gradAgendado)" stroke="#0c2440" strokeWidth={1}
+                      animationBegin={150} animationDuration={900} animationEasing="ease-out" />
+                    <Bar dataKey="Sem agendamento" stackId="mes" fill="url(#gradSemAgend)" stroke="#0c2440" strokeWidth={1}
+                      radius={[5, 5, 0, 0]} animationBegin={300} animationDuration={900} animationEasing="ease-out" />
                   </BarChart>
                 </ResponsiveContainer>
+                </Reveal>
               </div>
 
               {/* Status pie */}
               <div className="bg-white/4 rounded-xl border border-white/8 p-5">
                 <h3 className="text-sm font-semibold text-white/80 mb-4">Distribuição de Status</h3>
-                <ResponsiveContainer width="100%" height={160}>
-                  <PieChart>
-                    <Pie
-                      data={pieData.filter((d) => d.value > 0)}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={70}
-                      dataKey="value"
-                      paddingAngle={2}
-                    >
-                      {pieData.map((_, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{ background: "#0a1929", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 12 }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <Reveal height={170}>
+                <div className="relative">
+                  <ResponsiveContainer width="100%" height={170}>
+                    <PieChart>
+                      <Pie
+                        data={pieDataVisible}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={52}
+                        outerRadius={72}
+                        dataKey="value"
+                        paddingAngle={3}
+                        cornerRadius={5}
+                        activeIndex={pieActive}
+                        activeShape={(props: React.ComponentProps<typeof Sector>) => (
+                          <Sector {...props} outerRadius={(props.outerRadius ?? 72) + 6} />
+                        )}
+                        onMouseEnter={(_, i) => setPieActive(i)}
+                        onMouseLeave={() => setPieActive(-1)}
+                        animationDuration={900}
+                        animationEasing="ease-out"
+                      >
+                        {pieDataVisible.map((d) => (
+                          <Cell key={d.name} fill={d.color} stroke="transparent" style={{ outline: "none" }} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<ChartTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className={`text-xl font-bold tabular-nums ${(bi.taxa_execucao ?? 0) >= 70 ? "text-emerald-400" : (bi.taxa_execucao ?? 0) >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                      {(bi.taxa_execucao ?? 0).toFixed(1)}%
+                    </span>
+                    <span className="text-[10px] text-white/35">executado</span>
+                  </div>
+                </div>
+                </Reveal>
                 <div className="space-y-1 mt-2">
-                  {pieData.map((d, i) => (
+                  {pieData.map((d) => (
                     <div key={d.name} className="flex items-center justify-between text-xs">
                       <span className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: PIE_COLORS[i] }} />
+                        <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: d.color }} />
                         <span className="text-white/50">{d.name}</span>
                       </span>
                       <span className="text-white/70 font-medium tabular-nums">{d.value.toLocaleString("pt-BR")}</span>
@@ -1199,24 +1296,46 @@ export default function PTAMensalPage() {
             {/* Por Gerência chart */}
             {bi.por_gerencia.length > 0 && (
               <div className="mb-8 bg-white/4 rounded-xl border border-white/8 p-5">
-                <h3 className="text-sm font-semibold text-white/80 mb-4">Execução por Gerência</h3>
-                <ResponsiveContainer width="100%" height={Math.max(180, bi.por_gerencia.slice(0, 12).length * 32)}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-white/80">Execução por Gerência</h3>
+                  <span className="text-[10px] text-white/25">barra completa = total planejado · % = taxa de execução</span>
+                </div>
+                <Reveal height={Math.max(180, bi.por_gerencia.slice(0, 12).length * 34)}>
+                <ResponsiveContainer width="100%" height={Math.max(180, bi.por_gerencia.slice(0, 12).length * 34)}>
                   <BarChart
-                    data={bi.por_gerencia.slice(0, 12).map((g) => ({ name: g.gerencia, Total: g.total, Realizado: g.realizado }))}
+                    data={bi.por_gerencia.slice(0, 12).map((g) => ({
+                      name: g.gerencia,
+                      Realizado: g.realizado,
+                      "A executar": Math.max(0, g.total - g.realizado),
+                      taxa: g.taxa,
+                    }))}
                     layout="vertical"
-                    barCategoryGap="20%"
+                    barCategoryGap="32%"
+                    margin={{ right: 44 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
-                    <XAxis type="number" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <defs>
+                      <linearGradient id="gradGerencia" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#059669" />
+                        <stop offset="100%" stopColor="#34d399" />
+                      </linearGradient>
+                    </defs>
+                    <XAxis type="number" hide />
                     <YAxis type="category" dataKey="name" width={150} tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip
-                      contentStyle={{ background: "#0a1929", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 12 }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }} />
-                    <Bar dataKey="Total" fill="#3b82f6" radius={[0, 3, 3, 0]} />
-                    <Bar dataKey="Realizado" fill="#34d399" radius={[0, 3, 3, 0]} />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                    <Bar dataKey="Realizado" stackId="g" fill="url(#gradGerencia)" radius={[4, 0, 0, 4]}
+                      animationDuration={900} animationEasing="ease-out" />
+                    <Bar dataKey="A executar" stackId="g" fill="rgba(255,255,255,0.07)" radius={[0, 4, 4, 0]}
+                      animationBegin={200} animationDuration={900} animationEasing="ease-out">
+                      <LabelList
+                        dataKey="taxa"
+                        position="right"
+                        formatter={(v: number) => `${Math.round(v)}%`}
+                        style={{ fill: "rgba(255,255,255,0.55)", fontSize: 11, fontWeight: 600 }}
+                      />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+                </Reveal>
               </div>
             )}
 

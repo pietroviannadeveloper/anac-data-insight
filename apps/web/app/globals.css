@@ -181,3 +181,29 @@ body {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   }
 }
+
+/* ── Login: radar, warp de zoom e boas-vindas ─────────────────────────────── */
+@keyframes radar-sweep {
+  to { transform: rotate(360deg); }
+}
+@keyframes login-flash-in {
+  from { opacity: 0; }
+  60%  { opacity: 0.35; }
+  to   { opacity: 1; }
+}
+@keyframes welcome-item-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes hud-progress {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+@keyframes hud-ring-spin {
+  to { transform: rotate(360deg); }
+}
+.animate-radar-sweep  { animation: radar-sweep 5s linear infinite; }
+.animate-login-flash  { animation: login-flash-in 0.9s ease-in both; }
+.animate-welcome-item { animation: welcome-item-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-hud-progress { animation: hud-progress 2s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.animate-hud-ring     { animation: hud-ring-spin 14s linear infinite; }

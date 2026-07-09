@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import AppHeader from "@/components/layout/AppHeader";
 import AppFooter from "@/components/layout/AppFooter";
+import { Reveal } from "@/components/ui/Reveal";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import {
@@ -355,16 +356,24 @@ export default function PTADashboardPage() {
               <BarChart2 className="w-4 h-4 text-amber-400" /> Distribuição por Status
             </h2>
             {statusData.length === 0 ? <p className="text-white/30 text-sm text-center py-10">Sem dados</p> : (
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie data={statusData} cx="50%" cy="50%" outerRadius={90} dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                    {statusData.map((_, i) => <Cell key={i} fill={STATUS_COLORS[i % STATUS_COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: "11px", color: "#94a3b8" }} />
-                </PieChart>
-              </ResponsiveContainer>
+              <Reveal height={240} className="relative">
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={58} outerRadius={90} dataKey="value"
+                      paddingAngle={3} cornerRadius={5}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}
+                      animationDuration={900} animationEasing="ease-out">
+                      {statusData.map((_, i) => <Cell key={i} fill={STATUS_COLORS[i % STATUS_COLORS.length]} stroke="transparent" />)}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: "11px", color: "#94a3b8" }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-6">
+                  <span className={`text-xl font-bold tabular-nums ${taxaColor(taxa)}`}>{taxa.toFixed(1)}%</span>
+                  <span className="text-[10px] text-white/35">executado</span>
+                </div>
+              </Reveal>
             )}
           </div>
 
@@ -377,17 +386,19 @@ export default function PTADashboardPage() {
                 <CheckCircle2 className="w-8 h-8" /><p className="text-sm">Nenhuma pendência</p>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={pendenciasData} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                  <XAxis dataKey="name" tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" name="Qtd." radius={[4, 4, 0, 0]}>
-                    {pendenciasData.map((d, i) => <Cell key={i} fill={d.fill} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <Reveal height={240}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={pendenciasData} margin={{ top: 4, right: 8, left: -10, bottom: 0 }} barCategoryGap="25%">
+                    <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="name" tick={{ fill: "#64748b", fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: "#64748b", fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                    <Bar dataKey="value" name="Qtd." radius={[5, 5, 0, 0]} animationDuration={900} animationEasing="ease-out">
+                      {pendenciasData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Reveal>
             )}
           </div>
         </div>

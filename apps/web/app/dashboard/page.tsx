@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import AppHeader from "@/components/layout/AppHeader";
 import AppFooter from "@/components/layout/AppFooter";
+import { Reveal } from "@/components/ui/Reveal";
 import { api } from "@/lib/api";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
@@ -411,19 +412,29 @@ function DashboardInner() {
           <section>
             <h2 className="text-xs font-semibold text-blue-200/50 uppercase tracking-widest mb-3">Distribuição por Status</h2>
             <div className="bg-white/5 border border-white/10 rounded-xl p-6 flex flex-col lg:flex-row items-center gap-8">
+              <Reveal height={220} className="relative flex-1 w-full">
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie data={data.activities_by_status.filter(s => s.value > 0)}
                     dataKey="value" nameKey="status" cx="50%" cy="50%"
-                    outerRadius={90} labelLine={false} label={PieLabel}>
-                    {data.activities_by_status.map(e => (
-                      <Cell key={e.key} fill={STATUS_COLORS[e.key] ?? "#6b7280"} />
+                    innerRadius={60} outerRadius={92} paddingAngle={3} cornerRadius={5}
+                    labelLine={false} label={PieLabel}
+                    animationDuration={900} animationEasing="ease-out">
+                    {data.activities_by_status.filter(s => s.value > 0).map(e => (
+                      <Cell key={e.key} fill={STATUS_COLORS[e.key] ?? "#6b7280"} stroke="transparent" />
                     ))}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
                   <Legend formatter={v => <span className="text-xs text-blue-200/70">{v}</span>} />
                 </PieChart>
               </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-6">
+                <span className={`text-xl font-bold tabular-nums ${data.average_execution_rate >= 80 ? "text-emerald-400" : data.average_execution_rate >= 50 ? "text-yellow-300" : "text-red-400"}`}>
+                  {data.average_execution_rate}%
+                </span>
+                <span className="text-[10px] text-blue-200/40">execução</span>
+              </div>
+              </Reveal>
               <div className="flex flex-col gap-3 min-w-[180px]">
                 {data.activities_by_status.map(s => (
                   <div key={s.key} className="flex items-center gap-3">
@@ -475,6 +486,7 @@ function DashboardInner() {
             <>
               {/* gráfico */}
               <div className="bg-white/5 border border-white/10 rounded-xl p-6 mb-4">
+                <Reveal height={Math.max(180, data.activities_by_type.length * 52)}>
                 <ResponsiveContainer width="100%" height={Math.max(180, data.activities_by_type.length * 52)}>
                   <BarChart
                     data={data.activities_by_type.map(t => ({
@@ -492,11 +504,15 @@ function DashboardInner() {
                       tick={{ fill: "rgba(147,197,253,0.7)", fontSize: 10 }} axisLine={false} tickLine={false} />
                     <Tooltip content={<CustomTooltipO135 />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
                     <Legend formatter={v => <span className="text-xs text-blue-200/70">{v}</span>} />
-                    <Bar dataKey="realizado" name="Realizado" fill="#34d399" stackId="a" />
-                    <Bar dataKey="agendado" name="Agendado" fill="#60a5fa" stackId="a" />
-                    <Bar dataKey="sem_agendamento" name="Sem agend." fill="#fbbf24" radius={[0,4,4,0]} stackId="a" />
+                    <Bar dataKey="realizado" name="Realizado" fill="#34d399" stackId="a" stroke="#0d2247" strokeWidth={1}
+                      animationDuration={900} animationEasing="ease-out" />
+                    <Bar dataKey="agendado" name="Agendado" fill="#60a5fa" stackId="a" stroke="#0d2247" strokeWidth={1}
+                      animationBegin={150} animationDuration={900} animationEasing="ease-out" />
+                    <Bar dataKey="sem_agendamento" name="Sem agend." fill="#fbbf24" radius={[0,4,4,0]} stackId="a" stroke="#0d2247" strokeWidth={1}
+                      animationBegin={300} animationDuration={900} animationEasing="ease-out" />
                   </BarChart>
                 </ResponsiveContainer>
+                </Reveal>
               </div>
 
               {/* tabela */}
@@ -624,18 +640,20 @@ function DashboardInner() {
           <section>
             <h2 className="text-xs font-semibold text-blue-200/50 uppercase tracking-widest mb-3">Empresas com Mais Atividades</h2>
             <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <Reveal height={Math.max(200, data.top_companies.length * 28)}>
               <ResponsiveContainer width="100%" height={Math.max(200, data.top_companies.length * 28)}>
                 <BarChart data={data.top_companies.map(c => ({ ...c, empresa: shortName(c.empresa) }))}
-                  layout="vertical" margin={{ top: 0, right: 40, left: 8, bottom: 0 }}>
+                  layout="vertical" margin={{ top: 0, right: 40, left: 8, bottom: 0 }} barCategoryGap="25%">
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
                   <XAxis type="number" tick={{ fill: "rgba(147,197,253,0.5)", fontSize: 10 }} axisLine={false} tickLine={false} />
                   <YAxis type="category" dataKey="empresa" width={160} tick={{ fill: "rgba(147,197,253,0.7)", fontSize: 10 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-                  <Bar dataKey="total" name="Atividades" radius={[0,4,4,0]}>
+                  <Bar dataKey="total" name="Atividades" radius={[0,4,4,0]} animationDuration={900} animationEasing="ease-out">
                     {data.top_companies.map((_, i) => <Cell key={i} fill={COMPANY_COLORS[i % COMPANY_COLORS.length]} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              </Reveal>
             </div>
           </section>
         )}
@@ -645,18 +663,20 @@ function DashboardInner() {
           <section>
             <h2 className="text-xs font-semibold text-blue-200/50 uppercase tracking-widest mb-3">Empresas com Menos Atividades</h2>
             <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <Reveal height={Math.max(200, data.bottom_companies.length * 28)}>
               <ResponsiveContainer width="100%" height={Math.max(200, data.bottom_companies.length * 28)}>
                 <BarChart data={data.bottom_companies.map(c => ({ ...c, empresa: shortName(c.empresa) }))}
-                  layout="vertical" margin={{ top: 0, right: 40, left: 8, bottom: 0 }}>
+                  layout="vertical" margin={{ top: 0, right: 40, left: 8, bottom: 0 }} barCategoryGap="25%">
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
                   <XAxis type="number" tick={{ fill: "rgba(147,197,253,0.5)", fontSize: 10 }} axisLine={false} tickLine={false} />
                   <YAxis type="category" dataKey="empresa" width={160} tick={{ fill: "rgba(147,197,253,0.7)", fontSize: 10 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-                  <Bar dataKey="total" name="Atividades" radius={[0,4,4,0]}>
+                  <Bar dataKey="total" name="Atividades" radius={[0,4,4,0]} animationDuration={900} animationEasing="ease-out">
                     {data.bottom_companies.map((_, i) => <Cell key={i} fill={COMPANY_COLORS[(i+5) % COMPANY_COLORS.length]} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              </Reveal>
             </div>
           </section>
         )}
@@ -666,18 +686,20 @@ function DashboardInner() {
           <section>
             <h2 className="text-xs font-semibold text-blue-200/50 uppercase tracking-widest mb-3">Sem Agendamento por Empresa</h2>
             <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <Reveal height={Math.max(200, data.pending_by_company.length * 30)}>
               <ResponsiveContainer width="100%" height={Math.max(200, data.pending_by_company.length * 30)}>
                 <BarChart data={data.pending_by_company.map(c => ({ ...c, empresa: shortName(c.empresa) }))}
-                  layout="vertical" margin={{ top: 0, right: 40, left: 8, bottom: 0 }}>
+                  layout="vertical" margin={{ top: 0, right: 40, left: 8, bottom: 0 }} barCategoryGap="25%">
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
                   <XAxis type="number" allowDecimals={false} tick={{ fill: "rgba(147,197,253,0.5)", fontSize: 10 }} axisLine={false} tickLine={false} />
                   <YAxis type="category" dataKey="empresa" width={160} tick={{ fill: "rgba(147,197,253,0.7)", fontSize: 10 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-                  <Bar dataKey="pendentes" name="Sem agendamento" radius={[0,4,4,0]}>
+                  <Bar dataKey="pendentes" name="Sem agendamento" radius={[0,4,4,0]} animationDuration={900} animationEasing="ease-out">
                     {data.pending_by_company.map((_, i) => <Cell key={i} fill={i === 0 ? "#f87171" : "#fbbf24"} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              </Reveal>
             </div>
           </section>
         )}
@@ -687,6 +709,7 @@ function DashboardInner() {
           <section>
             <h2 className="text-xs font-semibold text-blue-200/50 uppercase tracking-widest mb-3">Consolidado — Total vs Pendentes por Empresa</h2>
             <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <Reveal height={300}>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart
                   data={(() => {
@@ -704,10 +727,13 @@ function DashboardInner() {
                   <YAxis tick={{ fill: "rgba(147,197,253,0.5)", fontSize: 10 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
                   <Legend wrapperStyle={{ paddingTop: 8 }} formatter={v => <span className="text-xs text-blue-200/70">{v}</span>} />
-                  <Bar dataKey="realizadas" name="Realizadas + Agendadas" stackId="a" fill="#34d399" />
-                  <Bar dataKey="pendentes" name="Sem agendamento" stackId="a" fill="#fbbf24" radius={[4,4,0,0]} />
+                  <Bar dataKey="realizadas" name="Realizadas + Agendadas" stackId="a" fill="#34d399" stroke="#0d2247" strokeWidth={1}
+                    animationDuration={900} animationEasing="ease-out" />
+                  <Bar dataKey="pendentes" name="Sem agendamento" stackId="a" fill="#fbbf24" radius={[4,4,0,0]} stroke="#0d2247" strokeWidth={1}
+                    animationBegin={200} animationDuration={900} animationEasing="ease-out" />
                 </BarChart>
               </ResponsiveContainer>
+              </Reveal>
             </div>
           </section>
         )}

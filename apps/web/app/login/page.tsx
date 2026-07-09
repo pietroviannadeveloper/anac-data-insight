@@ -15,10 +15,6 @@ import {
   User,
   KeyRound,
   Plane,
-  BarChart3,
-  FileSpreadsheet,
-  Sparkles,
-  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,105 +36,113 @@ declare global {
   }
 }
 
-const FEATURES = [
-  { icon: BarChart3, label: "Indicadores operacionais em tempo real" },
-  { icon: FileSpreadsheet, label: "Análise inteligente de planilhas" },
-  { icon: Sparkles, label: "Relatórios e briefings gerados por IA" },
-  { icon: ShieldCheck, label: "Governança e auditoria de dados" },
-];
+type Phase = "form" | "zoom" | "welcome";
 
-/** Esquadrilha de aviões que orbita um ponto e segue o cursor pela tela. */
-function PlaneSwarm() {
-  const containerRef = useRef<HTMLDivElement>(null);
+/** "pietro.rocha" → "Pietro Rocha" */
+const formatName = (login: string): string =>
+  login
+    .split("@")[0]
+    .replace(/[._]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    const planes = Array.from(el.children) as HTMLElement[];
-    const cx = window.innerWidth * 0.5;
-    const cy = window.innerHeight * 0.42;
-    const state = planes.map((_, i) => ({
-      x: cx,
-      y: cy,
-      // fase inicial espalhada; metade orbita no sentido contrário
-      angle: (i / planes.length) * Math.PI * 2,
-      radius: 60 + i * 26,
-      speed: (0.45 + (i % 3) * 0.22) * (i % 2 === 0 ? 1 : -1),
-    }));
-    let target = { x: cx, y: cy };
-    const onMove = (e: MouseEvent) => {
-      target = { x: e.clientX, y: e.clientY };
-    };
-    window.addEventListener("mousemove", onMove);
-
-    let raf = 0;
-    let last = performance.now();
-    const tick = (now: number) => {
-      const dt = Math.min((now - last) / 1000, 0.05);
-      last = now;
-      for (let i = 0; i < state.length; i++) {
-        const s = state[i];
-        s.angle += s.speed * dt;
-        // órbita elíptica ao redor do alvo, com aproximação suave
-        const dx = target.x + Math.cos(s.angle) * s.radius;
-        const dy = target.y + Math.sin(s.angle) * s.radius * 0.7;
-        const px = s.x;
-        const py = s.y;
-        s.x += (dx - s.x) * Math.min(1, dt * 3);
-        s.y += (dy - s.y) * Math.min(1, dt * 3);
-        const heading = (Math.atan2(s.y - py, s.x - px) * 180) / Math.PI;
-        // +45° compensa a inclinação nativa do ícone Plane
-        planes[i].style.transform = `translate(${s.x}px, ${s.y}px) rotate(${heading + 45}deg)`;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    el.style.opacity = "1";
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("mousemove", onMove);
-    };
-  }, []);
-
+/** Cena de fundo: vídeo + véu azul-escuro + radar (anéis, mira e varredura). */
+function RadarScene({ zooming }: { zooming: boolean }) {
   return (
     <div
-      ref={containerRef}
-      className="absolute inset-0 hidden md:block opacity-0 transition-opacity duration-700"
+      className={`absolute inset-0 overflow-hidden pointer-events-none transition-transform duration-[900ms] ease-[cubic-bezier(0.7,0,0.84,0)] ${
+        zooming ? "scale-[7]" : "scale-100"
+      }`}
       aria-hidden
     >
-      {[5, 4, 6, 4, 5, 4].map((size, i) => (
-        <Plane
-          key={i}
-          className={`absolute top-0 left-0 will-change-transform ${
-            i % 2 === 0 ? "text-blue-200/45" : "text-sky-300/30"
-          }`}
-          style={{ width: size * 4, height: size * 4, marginLeft: -size * 2, marginTop: -size * 2 }}
-        />
-      ))}
+      <video
+        src="/login-video.mp4"
+        autoPlay
+        muted
+        loop
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover scale-[1.22] origin-[30%_40%]"
+      />
+      {/* ↑ zoom com origem deslocada esconde a marca-d'água do canto inferior direito */}
+      {/* Véu de controle de tráfego — azul profundo, mais denso nas bordas */}
+      <div className="absolute inset-0 bg-[#020c1f]/55" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_25%,rgba(2,12,31,0.85)_100%)]" />
+
+      {/* Radar centrado atrás do formulário */}
+      <div className="absolute inset-0 hidden sm:flex items-center justify-center">
+        <div className="relative w-[88vmin] h-[88vmin]">
+          {/* Anéis concêntricos */}
+          {["inset-0", "inset-[16%]", "inset-[32%]", "inset-[44%]"].map((inset) => (
+            <div
+              key={inset}
+              className={`absolute ${inset} rounded-full border border-sky-400/15 shadow-[0_0_24px_rgba(56,189,248,0.06)]`}
+            />
+          ))}
+          {/* Mira (crosshair) */}
+          <div className="absolute left-0 right-0 top-1/2 h-px bg-gradient-to-r from-transparent via-sky-400/20 to-transparent" />
+          <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gradient-to-b from-transparent via-sky-400/20 to-transparent" />
+          {/* Varredura brilhante */}
+          <div className="absolute inset-0 rounded-full animate-radar-sweep bg-[conic-gradient(from_0deg,rgba(56,189,248,0.28),rgba(56,189,248,0.05)_55deg,transparent_70deg)]" />
+        </div>
+      </div>
     </div>
   );
 }
 
-/** Céu fotográfico com véu de contraste e esquadrilha interativa. */
-function AviationScene() {
+/** Tela pós-login: interior de cabine / painel de controle com HUD. */
+function WelcomeCockpit({ name }: { name: string }) {
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
-      <Image
-        src="/login-sky2.jpg"
-        alt=""
-        fill
-        priority
-        quality={95}
-        sizes="100vw"
-        className="object-cover"
+    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_at_center,#08234d_0%,#041331_55%,#020c1f_100%)]">
+      {/* Linha do horizonte */}
+      <div
+        className="absolute left-0 right-0 top-1/2 h-px bg-gradient-to-r from-transparent via-sky-400/50 to-transparent animate-welcome-item"
+        style={{ animationDelay: "0.15s" }}
       />
-      {/* Véu de leitura — escurece a esquerda (texto) e o topo, deixa o pôr do sol respirar */}
-      <div className="absolute inset-0 bg-gradient-to-r from-[#020c1f]/80 via-[#03153a]/40 to-[#03153a]/20" />
-      <div className="absolute inset-0 bg-gradient-to-b from-[#020c1f]/45 via-transparent to-[#020c1f]/35" />
+      {/* Cantoneiras HUD */}
+      <div className="absolute top-8 left-8 w-14 h-14 border-t-2 border-l-2 border-sky-400/30 rounded-tl-lg" />
+      <div className="absolute top-8 right-8 w-14 h-14 border-t-2 border-r-2 border-sky-400/30 rounded-tr-lg" />
+      <div className="absolute bottom-8 left-8 w-14 h-14 border-b-2 border-l-2 border-sky-400/30 rounded-bl-lg" />
+      <div className="absolute bottom-8 right-8 w-14 h-14 border-b-2 border-r-2 border-sky-400/30 rounded-br-lg" />
 
-      <PlaneSwarm />
+      {/* Anel HUD central */}
+      <div className="relative w-52 h-52 sm:w-60 sm:h-60 mb-10 animate-welcome-item">
+        <div className="absolute inset-0 rounded-full border border-sky-400/30 shadow-[0_0_80px_rgba(56,189,248,0.18),inset_0_0_40px_rgba(56,189,248,0.08)]" />
+        <div className="absolute inset-4 rounded-full border border-dashed border-sky-400/20 animate-hud-ring" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Plane className="w-14 h-14 text-sky-300 drop-shadow-[0_0_16px_rgba(56,189,248,0.7)]" />
+        </div>
+      </div>
+
+      <h2
+        className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-3 animate-welcome-item text-center px-6"
+        style={{ animationDelay: "0.25s" }}
+      >
+        Bem-vindo, <span className="text-sky-300">{name}</span>
+      </h2>
+      <p
+        className="text-blue-200/60 text-sm sm:text-base mb-10 animate-welcome-item"
+        style={{ animationDelay: "0.4s" }}
+      >
+        Sistemas iniciados — preparando o painel de controle
+      </p>
+
+      {/* Barra de progresso HUD */}
+      <div
+        className="w-64 h-1 rounded-full bg-white/10 overflow-hidden animate-welcome-item"
+        style={{ animationDelay: "0.5s" }}
+      >
+        <div className="h-full rounded-full bg-gradient-to-r from-sky-500 to-sky-300 shadow-[0_0_12px_rgba(56,189,248,0.8)] animate-hud-progress" />
+      </div>
+
+      {/* Instrumentos decorativos */}
+      <div
+        className="absolute bottom-10 flex gap-8 text-[11px] font-mono tracking-widest text-sky-300/50 animate-welcome-item"
+        style={{ animationDelay: "0.6s" }}
+      >
+        <span>ALT 35.000 FT</span>
+        <span>HDG 274°</span>
+        <span>GS 460 KT</span>
+        <span className="text-emerald-400/70">SYS OK</span>
+      </div>
     </div>
   );
 }
@@ -161,7 +165,10 @@ function LoginContent() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState<"username" | "password" | null>(null);
+  const [phase, setPhase] = useState<Phase>("form");
+  const [welcomeName, setWelcomeName] = useState("");
   const googleButtonRef = useRef<HTMLDivElement>(null);
+  const timersRef = useRef<number[]>([]);
 
   useEffect(() => {
     if (auth.isAuthenticated()) {
@@ -174,7 +181,26 @@ function LoginContent() {
         toast.warning("Sua sessão expirou. Faça login novamente.");
       }
     } catch {}
-  }, []);
+    return () => timersRef.current.forEach(clearTimeout);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Sequência pós-autenticação: zoom no fundo → cabine de boas-vindas → redirect. */
+  const startWelcomeSequence = useCallback(
+    (fallbackName: string) => {
+      const dest = searchParams.get("redirect") || "/";
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        router.replace(dest);
+        return;
+      }
+      setWelcomeName(formatName(auth.getUsername() || fallbackName));
+      setPhase("zoom");
+      timersRef.current.push(
+        window.setTimeout(() => setPhase("welcome"), 950),
+        window.setTimeout(() => router.replace(dest), 3400)
+      );
+    },
+    [router, searchParams]
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,7 +209,7 @@ function LoginContent() {
     setError(null);
     try {
       await api.login(username, password);
-      router.replace(searchParams.get("redirect") || "/");
+      startWelcomeSequence(username);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Credenciais inválidas.");
       setLoading(false);
@@ -196,13 +222,13 @@ function LoginContent() {
       setError(null);
       try {
         await api.loginWithGoogle(response.credential);
-        router.replace(searchParams.get("redirect") || "/");
+        startWelcomeSequence("");
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Não foi possível entrar com o Google.");
         setGoogleLoading(false);
       }
     },
-    [router, searchParams]
+    [startWelcomeSequence]
   );
 
   const handleGoogleScriptLoad = () => {
@@ -221,67 +247,26 @@ function LoginContent() {
   };
 
   return (
-    <div className="min-h-screen flex relative bg-gradient-to-b from-[#020c1f] via-[#03153a] to-[#0a2a5e]">
-      <AviationScene />
+    <div className="min-h-screen flex relative overflow-hidden bg-gradient-to-b from-[#020c1f] via-[#03153a] to-[#0a2a5e]">
+      <RadarScene zooming={phase !== "form"} />
 
-      <div className="relative z-10 flex-1 flex items-center justify-center gap-12 xl:gap-20 px-6 lg:px-12 py-12">
-      {/* Painel esquerdo — boas-vindas */}
-      <div className="hidden lg:block w-full max-w-2xl">
-        <div>
-          <div
-            className="flex items-center gap-4 mb-10 animate-login-item"
-            style={{ animationDelay: "0.1s" }}
-          >
+      {/* Flash central durante o warp */}
+      {phase === "zoom" && (
+        <div className="absolute inset-0 z-20 pointer-events-none animate-login-flash bg-[radial-gradient(circle_at_center,rgba(125,211,252,0.95)_0%,rgba(56,189,248,0.4)_30%,rgba(2,12,31,0)_65%)]" />
+      )}
+
+      {phase === "welcome" && <WelcomeCockpit name={welcomeName} />}
+
+      {/* Formulário centralizado */}
+      <div
+        className={`relative z-10 flex-1 flex flex-col items-center justify-center px-6 py-12 transition-all duration-500 ease-in ${
+          phase === "form" ? "opacity-100 scale-100" : "opacity-0 scale-90 blur-sm pointer-events-none"
+        }`}
+      >
+        <div className="w-full max-w-md animate-login-card">
+          {/* Identidade */}
+          <div className="flex flex-col items-center gap-4 mb-8">
             <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-2xl shadow-blue-950/60">
-              <Image src={anacLogo} alt="ANAC" width={52} height={52} className="object-contain" />
-            </div>
-            <div>
-              <p className="text-white font-bold text-lg leading-tight">ANAC Data Insight</p>
-              <p className="text-blue-300/60 text-sm">Agência Nacional de Aviação Civil</p>
-            </div>
-          </div>
-
-          <h1
-            className="text-5xl xl:text-6xl font-bold text-white tracking-tight leading-[1.08] mb-6 animate-login-item text-balance"
-            style={{ animationDelay: "0.25s" }}
-          >
-            Inteligência de dados para a{" "}
-            <span className="bg-gradient-to-r from-blue-300 via-sky-300 to-indigo-300 bg-clip-text text-transparent">
-              aviação civil
-            </span>
-          </h1>
-
-          <p
-            className="text-blue-200/70 text-lg leading-relaxed mb-12 max-w-lg animate-login-item"
-            style={{ animationDelay: "0.4s" }}
-          >
-            Análise inteligente de dados operacionais, planilhas, relatórios e
-            indicadores estratégicos em uma única plataforma.
-          </p>
-
-          <ul className="grid grid-cols-2 gap-x-8 gap-y-5">
-            {FEATURES.map((f, i) => (
-              <li
-                key={f.label}
-                className="flex items-center gap-3.5 animate-login-item"
-                style={{ animationDelay: `${0.55 + i * 0.12}s` }}
-              >
-                <span className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0">
-                  <f.icon className="w-[18px] h-[18px] text-blue-300" />
-                </span>
-                <span className="text-blue-100/80 text-[15px]">{f.label}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      {/* Painel direito — card de login em glassmorphism */}
-      <div className="w-full max-w-md shrink-0">
-        <div className="w-full animate-login-card">
-          {/* Logo mobile */}
-          <div className="lg:hidden flex flex-col items-center gap-4 mb-10">
-            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center p-2 shadow-xl">
               <Image src={anacLogo} alt="ANAC" width={52} height={52} className="object-contain" />
             </div>
             <div className="text-center">
@@ -395,7 +380,7 @@ function LoginContent() {
                   </>
                 ) : (
                   <>
-                    Entrar na plataforma
+                    Entrar
                     <Plane className="w-[18px] h-[18px] transition-transform duration-300 group-hover:translate-x-1.5 group-hover:-translate-y-0.5" />
                   </>
                 )}
@@ -434,7 +419,6 @@ function LoginContent() {
             Agência Nacional de Aviação Civil · Uso interno restrito
           </p>
         </div>
-      </div>
       </div>
     </div>
   );
